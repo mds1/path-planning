@@ -41,23 +41,24 @@ L = fcn.setupLevels()
 
 #numlevels = 0
 """ Begin main algorithm """
-for idx in xrange(0, gl.numGoals):       # for each goal
-    xNew, yNew, zNew = fcn.general_n2c(gl.start)                # get current location
-    newObsExist = fcn.searchAndUpdate(xNew,yNew,zNew)           # search for obstacles
+for idx in xrange(0, gl.numGoals):                      # for each goal
+    xNew, yNew, zNew = fcn.general_n2c(gl.start)        # get current location
+    fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
     while gl.start != gl.goal:
         oldstart, oldgoal = gl.start, gl.goal         # Line 48 of Moving Target D*Lite
 
         # 1. Compute coarsest feasible hierarchical path
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
-        new_waypts = fcn.findCoarsePath(L)
+        nextpos = fcn.findCoarsePath(L)
 
+        #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='y', s=20)
         # for node in new_waypts:
         #     x,y,z = fcn.general_n2c(node)
         #     gl.ax1.scatter(x,y,z, c='b', s=5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
-        nextpos = fcn.postSmoothPath(new_waypts)
+        nextpos = fcn.postSmoothPath(nextpos)
         nextpos = [node for node in nextpos if not math.isinf(gl.costMatrix[node])]
         # for node in nextpos:
         #     x,y,z = fcn.general_n2c(node)
@@ -91,16 +92,17 @@ for idx in xrange(0, gl.numGoals):       # for each goal
                 wpX,wpY,wpZ = waypoint
                 goalnode = fcn.general_c2n(round(wpX),round(wpY),round(wpZ))
                 pathToFollow = L[0].computeShortestPathWithWaypoints_L0([gl.start, goalnode])   # get path
+                #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
 
                 # 5. Smooth the path and get the coordinates to move to
                 pathToFollow = fcn.postSmoothPath(pathToFollow)
                 nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
-
+                nextcoords_nodes = [fcn.general_c2n(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
                 # Line 53 of Moving Target D* Lite is computed within below while loop
                 # Line 54 of Moving Target D* Lite begins here
-                goalMoved, newObsExist = False, False
+                goalMoved, validCoarsePath, validL0Path = False, True, True
 
-                while not goalMoved and not newObsExist and validCoarsePath:
+                while not goalMoved and validCoarsePath and validL0Path:
                     # Save current position
                     xOld, yOld, zOld = xNew, yNew, zNew
 
@@ -129,15 +131,18 @@ for idx in xrange(0, gl.numGoals):       # for each goal
                     gl.stepCount += 1
 
                     # Search time
-                    newObsExist = fcn.searchAndUpdate(xNew, yNew, zNew, new_waypts_nodes)
-
-                    # Recalculate coarse path if it becomes invalid
-                    if goalMoved or newObsExist:
-                        validCoarsePath = False
+                    validCoarsePath, validL0Path = fcn.searchAndUpdate(xNew, yNew, zNew, new_waypts_nodes, nextcoords_nodes)
 
                     # If we reached the intermediate waypoint, move to next waypoint
                     if xNew == round(wpX) and yNew == round(wpY) and zNew == round(wpZ):
                         goalMoved = True
+                        break
+
+                    # # Recalculate coarse path if it becomes invalid
+                    # if goalMoved or newObsExist:
+                    #     break
+                    #
+                    if not validCoarsePath:
                         break
 
                 if not validCoarsePath:

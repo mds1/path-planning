@@ -23,6 +23,8 @@ makeFigure = gl.makeFigure
 makeMovie = gl.makeMovie
 restrictVerticalMovement = gl.restrictVerticalMovement
 minclustersize = gl.minclustersize
+distBetweenL0Paths = gl.distBetweenL0Paths
+
 zf1, zf2 = gl.zf1, gl.zf2
 
 def general_n2c(s):
@@ -39,6 +41,7 @@ def general_n2c(s):
     x = s - sizeX * (y - 1) - zMove * (z - 1)
 
     return x,y,z
+
 
 def succ(s):
     """ Find which nodes can be moved to next from node s"""
@@ -438,11 +441,12 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     """
     :param xNew, yNew, zNew: current location of UAV
     :param nextcoords: set of coordinates indicating where it will move next
+    :param args: arg1 checks new_waypoints_nodes, arg2 checks nextcoords_nodes
     :return: boolean, whether or not new obstacles exist nearby
     """
     cellsToUpdate = []
     cellappend = cellsToUpdate.append
-    newObsExist = False
+    validCoarsePath, validL0Path = True, True
 
     # Generate list of points to search
     searchRange = []
@@ -475,36 +479,14 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
                 # See if any are on current path, and if so, recalculate path
                 if args:
                     new_waypoints_nodes = args[0]
+                    nextcoords_nodes = args[1]
                     if obsLoc in new_waypoints_nodes:
-                        newObsExist = True
-                    # nextcoords = args[0]
-                    # nmp = nextcoords.shape[0]  # number of moves planned
-                    # if nmp >= searchRadius:
-                    #     searchDist = searchRadius
-                    # else:
-                    #     searchDist = nmp
-                    #
-                    #
-                    # for i in xrange(0,searchDist):
-                    #     # Rounding coordinate gives the voxel the point is in, unless we are at x.5
-                    #     # (in which case check both voxels)
-                    #     xnc, ync, znc = nextcoords[-1-i, 0], nextcoords[-1-i, 1], nextcoords[-1-i, 2]
-                    #
-                    #     if xnc%1 == 0.5 or ync%1 == 0.5 or znc%1 == 0.5:
-                    #         xnc1, xnc2 = floor(xnc), ceil(xnc)
-                    #         ync1, ync2 = floor(ync), ceil(ync)
-                    #         znc1, znc2 = floor(znc), ceil(znc)
-                    #
-                    #         if isinf(gl.costMatrix[general_c2n(xnc1,ync1,znc1)]) \
-                    #                 and isinf(gl.costMatrix[general_c2n(xnc2,ync2,znc2)]):
-                    #             newObsExist = True
-                    #     else:
-                    #         futureX, futureY, futureZ = round(xnc), round(ync), round(znc)
-                    #
-                    #         if isinf(gl.costMatrix[general_c2n(futureX,futureY,futureZ)]):
-                    #             newObsExist = True
+                        validCoarsePath = False
+                    if obsLoc in nextcoords_nodes:
+                        validL0Path = False
 
-    return newObsExist
+
+    return validCoarsePath, validL0Path
 
 
 def fromCoarseToWaypoints(nextpos,L):
@@ -523,8 +505,9 @@ def fromCoarseToWaypoints(nextpos,L):
         dX, dY, dZ = nextX-prevX, nextY-prevY, nextZ-prevZ
 
         maxDist = max(abs(dist) for dist in [dX, dY, dZ])
-        minLDist = min(dist for dist in [L[1].lengthX, L[1].lengthY, L[1].lengthZ])
-        numpoints =  int(round(maxDist/minLDist))
+        #minLDist = min(dist for dist in [L[1].lengthX, L[1].lengthY, L[1].lengthZ])
+        numpoints =  int(round(maxDist/distBetweenL0Paths))
+        if numpoints == 0:   numpoints = 1
         for jj in xrange(1, numpoints+1):
             xFrac, yFrac, zFrac = dX/numpoints, dY/numpoints, dZ/numpoints
             new_waypoints[q,0], new_waypoints[q,1], new_waypoints[q,2] = prevX+jj*xFrac, prevY+jj*yFrac, prevZ+jj*zFrac

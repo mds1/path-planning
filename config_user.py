@@ -23,10 +23,13 @@ minclustersize = 8      # min dimension of a cluster is 8 L0 nodes
 mostcoarsecluster = 4   # successive clusters have 4x fewer nodes in each direction
 
 # Global Cost Scale Factors / Other Settings
+searchRadius = 20
 cX, cY, cZ = 1, 1, 1
 heuristicScale = 1.01
 mapscale = 2
-zf1, zf2 = 1, 0    # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
+zf1, zf2 = 1, 0             # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
+distBetweenL0Paths = 8     # the max distance in x, y, or z-direction between level 0 path calculations
+                            # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
 
 startWithEmptyMap = True
 smoothPath = False
@@ -88,8 +91,6 @@ seedStatic = np.random.random_integers(0,1000)
 seedStatic = 141
 np.random.seed(seedStatic)
 
-# Search Radius
-searchRadius = 20
 
 
 """
