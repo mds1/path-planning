@@ -51,9 +51,9 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
         nextpos = fcn.findCoarsePath(L)
-#        for node in nextpos:
-#            x,y,z = fcn.general_n2c(node)
-#            gl.ax1.scatter(x,y,z, c='b', s=5)
+        # for node in nextpos:
+        #     x,y,z = fcn.general_n2c(node)
+        #     gl.ax1.scatter(x,y,z, c='b', s=5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)

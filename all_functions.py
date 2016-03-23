@@ -1,5 +1,6 @@
 from __future__ import division
 import heapq
+import time
 from math import sqrt, ceil, floor, isinf
 import random
 import itertools
@@ -575,7 +576,7 @@ def findCoarsePath(L):
             try:
                 new_waypoints = L[level].computeShortestCoarsePath(new_waypoints)
                 #new_waypoints = L[level].computeShortestPathWithWaypoints(new_waypoints)
-                break
+
             except KeyError:    # if there's no path at that level
                 continue
 
@@ -728,7 +729,7 @@ class CL:   # Create level
         dx1, dy1, dz1 = gl.startX-xs, gl.startY-ys, gl.startZ-zs
         dx2, dy2, dz2 = gl.startX-xt, gl.startY-yt, gl.startZ-zt
 
-        if min(dx1*dx1 + dy1*dy1 + dz1*dz1, dx2*dx2 + dy2*dy2 + dz2*dz2) <= searchRadiusSquared:
+        if dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
             if not lineOfSight(xs,ys,zs,xt,yt,zt):
                 return float('inf')
 
@@ -973,38 +974,35 @@ class CL:   # Create level
 
         # Define successor states, one down in z-direction
         sDel = []
-        succNode = [s + sizeX*self.lengthX - (zMove*self.lengthZ*zf1+zf2)]
+        succNode = [
+            s + sizeX*self.lengthX - (zMove*self.lengthZ*zf1+zf2),
+            s + sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                      + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX                    - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                      - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s + sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                                         - (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s + sizeX*self.lengthX,
+            s + sizeX*self.lengthX + 1*self.lengthY,
+            s                      + 1*self.lengthY,
+            s - sizeX*self.lengthX + 1*self.lengthY,
+            s - sizeX*self.lengthX,
+            s - sizeX*self.lengthX - 1*self.lengthY,
+            s                      - 1*self.lengthY,
+            s + sizeX*self.lengthX - 1*self.lengthY,
+            s + sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s + sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                      + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s - sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                      - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s + sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2),
+            s                                       + (zMove*self.lengthZ*zf1 + zMove*zf2)
+        ]
 
-        appSN = succNode.append
-        appSN(s + sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                      + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX                    - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                      - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s + sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                                         - (zMove*self.lengthZ*zf1 + zMove*zf2))
-
-        # Same plane
-        appSN(s + sizeX*self.lengthX)
-        appSN(s + sizeX*self.lengthX + 1*self.lengthY)
-        appSN(s                      + 1*self.lengthY)
-        appSN(s - sizeX*self.lengthX + 1*self.lengthY)
-        appSN(s - sizeX*self.lengthX)
-        appSN(s - sizeX*self.lengthX - 1*self.lengthY)
-        appSN(s                      - 1*self.lengthY)
-        appSN(s + sizeX*self.lengthX - 1*self.lengthY)
-
-        # One up in z-direction
-        appSN(s + sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s + sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                      + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s - sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                      - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s + sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
-        appSN(s                                       + (zMove*self.lengthZ*zf1 + zMove*zf2))
 
         # Nodes to delete when on a boundary
         if xs > sizeX - self.lengthX:
@@ -1030,7 +1028,7 @@ class CL:   # Create level
         # check if start node is a successor
         dx, dy, dz = abs(xs-startx), abs(ys-starty), abs(zs-startz)
         if max(dx,dy,dz) <= self.maxlength:
-            appSN(startnode)
+            succNode.append(startnode)
 
         return succNode  # [sn for sn in succNode if sn > 0]
 

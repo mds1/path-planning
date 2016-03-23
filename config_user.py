@@ -27,10 +27,10 @@ mapscale = 4
 searchRadius = 20
 cX, cY, cZ = 1, 1, 1
 heuristicScale = 1.01
-zf1, zf2 = 0, 2             # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
+zf1, zf2 = 1, 0             # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
 distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
                                 # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
-distancerequirement = 8    # determines cluster size used for coarse paths, shorter = faster, but longer paths
+distancerequirement = 4    # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
                                 # distance >= distancerequirement*maxclusterdimension
 
 startWithEmptyMap = True
