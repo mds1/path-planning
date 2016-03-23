@@ -25,9 +25,10 @@ mostcoarsecluster = 4   # successive clusters have 4x fewer nodes in each direct
 # Global Cost Scale Factors / Other Settings
 mapscale = 4
 searchRadius = 20
-cX, cY, cZ = 1, 1, 2
+cX, cY, cZ = 1, 1, 1
 heuristicScale = 1.01
-zf1, zf2 = 1, 0             # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
+zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
+                                # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
 distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
                                 # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
 distancerequirement = 4    # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
@@ -44,12 +45,10 @@ restrictVerticalMovement = False
 sizeX = 64 * mapscale
 sizeY = 64 * mapscale
 sizeZ = 32 * mapscale
-startX = 3 * mapscale
-startY = 4 * mapscale
-startZ = 6 * mapscale
-goals = np.array([[62., 60., 6.,    0., 0.]])  * mapscale
+start = (3*mapscale , 4*mapscale, 6*mapscale)
+goals = np.array([[62., 60., 6., 0.]])  * mapscale
 #goals = np.array([[15., 8., 10.,    0., 0.], [23., 23., 19.,    0., 0.]])  * mapscale
-# 0 placeholders are for node and cantor function
+# 0 placeholders are for cantor function
 
 # Generate Moving Goals
 initX = []# [12, 6]
@@ -57,9 +56,7 @@ initY = []#[3, 2]
 initZ = []#[4, 7]
 T = []#[5, 2]
 
-initX = [mapscale*point for point in initX]
-initY = [mapscale*point for point in initY]
-initZ = [mapscale*point for point in initZ]
+
 
 # Fixed Individual Obstacles
 obstacles = np.array([])
@@ -72,12 +69,7 @@ rXdim =   [4,  20, 30, 5,  8,  6]
 rYdim =   [8,  12, 8,  5,  8,  6]
 rZdim =   [30,  8, 15, 28, 20, 28]
 
-rXstart = [mapscale*point for point in rXstart]  # modify by scale factor
-rYstart = [mapscale*point for point in rYstart]
-rZstart = [mapscale*point for point in rZstart]
-rXdim = [mapscale*point for point in rXdim]
-rYdim = [mapscale*point for point in rYdim]
-rZdim = [mapscale*point for point in rZdim]
+
 
 
 # Generate Random Dynamic Obstacles
@@ -102,11 +94,21 @@ np.random.seed(seedStatic)
 ====================================================================================
 """
 
+# Modifying by scale factor
+initX = [mapscale*point for point in initX]
+initY = [mapscale*point for point in initY]
+initZ = [mapscale*point for point in initZ]
+rXstart = [mapscale*point for point in rXstart]
+rYstart = [mapscale*point for point in rYstart]
+rZstart = [mapscale*point for point in rZstart]
+rXdim = [mapscale*point for point in rXdim]
+rYdim = [mapscale*point for point in rYdim]
+rZdim = [mapscale*point for point in rZdim]
+
 if makeMovie:
     makeFigure = True
 
-goalsVisited, goalhandles, numGoals, start, goal = [], [], [], [], []
-goalX, goalY, goalZ = [], [], []
+goalsVisited, goalhandles, numGoals, goal = [], [], [], []
 stepCount = 1              # number of total iterations
 number_of_obstacles = 0    # for genRandObs function
 numNodes = sizeX*sizeY*sizeZ
@@ -116,9 +118,6 @@ numlevels = 0
 removed = '<removed-task>'
 
 # Set up UAV map and plot
-
-#map_ = np.zeros((sizeX*sizeY*sizeZ+1))
-#costMatrix = {i: 1 for i in xrange(1,sizeX*sizeY*sizeZ+1)}
 map_ = collections.defaultdict(lambda : 0)
 costMatrix = collections.defaultdict(lambda: 1)
 
@@ -127,8 +126,9 @@ fig1 = plt.figure()
 ax1 = fig1.gca(projection='3d')
 
 # Used to save some variables
-closed_coarse = []
-closed_L0 = []
+closed_coarse = 0
+closed_refined = 0
+closed_L0 = 0
 output = {}
 
 

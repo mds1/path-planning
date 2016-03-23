@@ -17,8 +17,8 @@ fcn.clusterDimCheck()
 
 
 # Add moving goals to goals array
-if len(gl.initX) > 0:
-    newgoals = np.zeros((len(gl.initX), 5))
+if gl.initX:
+    newgoals = np.zeros((len(gl.initX), 4))
     for w in xrange(0, len(gl.initX)):
         newgoals[w, 0] = gl.initX[w]
         newgoals[w, 1] = gl.initY[w]
@@ -28,43 +28,39 @@ if len(gl.initX) > 0:
 gl.numGoals = gl.goals.shape[0]
 
 
-# Get start and goal nodes
-gl.start = fcn.general_c2n(gl.startX, gl.startY, gl.startZ)
-
 hyp = []
 for i in xrange(0, gl.numGoals):
     gX, gY, gZ = gl.goals[i, 0], gl.goals[i, 1], gl.goals[i, 2]
-    xdist, ydist, zdist = gX - gl.startX, gY - gl.startY, gZ - gl.startZ
+    xdist, ydist, zdist = gX - gl.start[0], gY - gl.start[1], gZ - gl.start[2]
     hyp.append(math.sqrt(xdist**2 + ydist**2 + zdist**2))
 
 goalindex = hyp.index(min(hyp))
-gl.goalX, gl.goalY, gl.goalZ = gl.goals[goalindex, 0], gl.goals[goalindex, 1], gl.goals[goalindex, 2]
+gl.goal = (gl.goals[goalindex, 0], gl.goals[goalindex, 1], gl.goals[goalindex, 2])
 
 
 # Ensure start coordinate are valid
-if gl.startX > sizeX or gl.startY > sizeY or gl.startX < 1 or gl.startY < 1:
-    raise Exception('Start coordinates are outside of map_ boundary')
+if gl.start[0]>sizeX or gl.start[1]>sizeY or gl.start[2]>sizeZ or gl.start[0]<1 or gl.start[1]<1 or gl.start[2]<1:
+    raise ValueError('Start coordinates are outside of map_ boundary')
 
 
 # Add node number and cantor id to goals array
 hyp = []
 for i in xrange(0, gl.numGoals):
     gX, gY, gZ = gl.goals[i, 0], gl.goals[i, 1], gl.goals[i, 2]
-    gl.goals[i, 3], gl.goals[i, 4] = fcn.general_c2n(gX, gY, gZ), fcn.cantor(gX, gY, gZ)
+    gl.goals[i, 3] = fcn.cantor(gX, gY, gZ)
 
-gl.goal = gl.goals[goalindex, 3]
+gl.goal = (gl.goals[goalindex,0], gl.goals[goalindex,1], gl.goals[goalindex,2])
 
 
 
 # Generating random fixed obstacles
 np.random.seed(gl.seedStatic)
+randomint = np.random.random_integers
 for i in xrange(0, gl.num2gen):
-    newXFixed = np.random.random_integers(1, sizeX)
-    newYFixed = np.random.random_integers(1, sizeY)
-    newZFixed = np.random.random_integers(1, sizeZ)
+    newXFixed, newYFixed, newZFixed = randomint(1, sizeX), randomint(1, sizeY), randomint(1, sizeZ)
 
-    obsnode = fcn.general_c2n(newXFixed, newYFixed, newZFixed)
-    newObsArray = [newXFixed, newYFixed, newZFixed, obsnode]
+    obsnode = (newXFixed, newYFixed, newZFixed)
+    newObsArray = [newXFixed, newYFixed, newZFixed]
 
     if len(gl.obstacles) > 0:
         gl.obstacles = np.vstack((gl.obstacles, newObsArray))
@@ -87,7 +83,7 @@ for i in xrange(0, gl.num2gen):
 # Generate plot with start and goal nodes
 if gl.makeFigure:
     gl.goalhandles = {}
-    gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='g')
+    gl.ax1.scatter(gl.start[0], gl.start[1], gl.start[2], c='g')
     for idx,eachgoal in enumerate(gl.goals):
         # This is done to save and remove scatter points for moving goals
         q = eachgoal[-1]
@@ -96,8 +92,6 @@ if gl.makeFigure:
 
 # Plot individual obstacles
 for idx, obs in enumerate(gl.obstacles):
-    gl.obstacles[idx, 3] = fcn.general_c2n(obs[0], obs[1], obs[2])
-    obsLoc = gl.obstacles[idx, 3]
     if gl.makeFigure:
         fcn.plotRectObs(obs[0], obs[1], obs[2], 1, 1, 1, gl.ax1)
 
@@ -122,7 +116,7 @@ gl.number_of_obstacles =gl.obstacles.shape[0]
 
 # Update cost matrix if needed
 for obs in gl.obstacles:
-    obsLoc = obs[3]
+    obsLoc = (obs[0], obs[1], obs[2])
     if gl.startWithEmptyMap:
         gl.map_[obsLoc] = -2                     # mark as undetected obstacle
     elif not gl.startWithEmptyMap:
@@ -171,22 +165,3 @@ while maxdim > gl.minclustersize:
     maxdim = maxdim / gl.mostcoarsecluster
     gl.numlevels += 1
 
-
-
-
-# print len(L)
-#
-# L = {}
-# L[1] = fcn.CreateLevel(1,8,8,8)
-# L[1].preprocessing()
-# print len(L[1].S), len(L[1].E)
-
-# # Define outputs
-# g.output = {'map_dimensions' : (sizeX, sizeY, sizeZ)}
-# g.output['start_coords'] = g.startX, g.startY, g.startZ
-# g.output['start_node'] = g.start
-# g.output['goal_nodes'] = g.goals
-# g.output['seed_dyn'] = g.seedDyn
-# g.output['seed_static'] = g.seedStatic
-# g.output['nodePath'] = []
-# g.output['cost_scale_factors'] = g.cX, g.cY, g.cZ
