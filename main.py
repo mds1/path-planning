@@ -51,11 +51,9 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
         nextpos = fcn.findCoarsePath(L)
-
-        #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='y', s=20)
-        # for node in new_waypts:
-        #     x,y,z = fcn.general_n2c(node)
-        #     gl.ax1.scatter(x,y,z, c='b', s=5)
+#        for node in nextpos:
+#            x,y,z = fcn.general_n2c(node)
+#            gl.ax1.scatter(x,y,z, c='b', s=5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)
@@ -64,6 +62,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         #     x,y,z = fcn.general_n2c(node)
         #     gl.ax1.scatter(x,y,z, c='y', s=5)
 
+        #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='y', s=20)
 
         validCoarsePath = True
         while validCoarsePath and gl.start != gl.goal:
@@ -92,7 +91,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 wpX,wpY,wpZ = waypoint
                 goalnode = fcn.general_c2n(round(wpX),round(wpY),round(wpZ))
                 pathToFollow = L[0].computeShortestPathWithWaypoints_L0([gl.start, goalnode])   # get path
-                #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
+#                gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
 
                 # 5. Smooth the path and get the coordinates to move to
                 pathToFollow = fcn.postSmoothPath(pathToFollow)

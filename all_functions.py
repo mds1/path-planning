@@ -14,7 +14,7 @@ import config_user as gl
 sizeX, sizeY, sizeZ = gl.sizeX, gl.sizeY, gl.sizeZ
 cX, cY, cZ, zMove = gl.cX, gl.cY, gl.cZ, sizeX * sizeY
 
-searchRadius = gl.searchRadius
+searchRadius,searchRadiusSquared = gl.searchRadius, gl.searchRadius**2
 sr = searchRadius
 numNodes = sizeX, sizeY, sizeZ
 heuristicScale = gl.heuristicScale
@@ -24,8 +24,10 @@ makeMovie = gl.makeMovie
 restrictVerticalMovement = gl.restrictVerticalMovement
 minclustersize = gl.minclustersize
 distBetweenL0Paths = gl.distBetweenL0Paths
+distancerequirement = gl.distancerequirement
 
 zf1, zf2 = gl.zf1, gl.zf2
+
 
 def general_n2c(s):
     """
@@ -187,14 +189,21 @@ def heuristic(us,ut):
     return heuristicScale * sqrt(dx*dx + dy*dy + dz*dz)
 
 
-def lineOfSight(us,ut):
+def lineOfSight(*args):
     """
-    :param us: source node
-    :param ut: target node
+    :param us OR x1,y1,z1: source node, given as node number or coordinates
+    :param ut OR x2,y2,z2: target node, given as node number or coordinates
     :return: boolean, whether or not line of sight exists between the two nodes
     """
-    x1, y1, z1 = general_n2c(us)  # S[s]  # S[1,s],        S[2,s],         S[3,s]
-    x2, y2 ,z2 = general_n2c(ut) # S[sp] # S[1,sp],       S[2,sp],        S[3,sp]
+
+    if len(args) == 6:
+        x1, y1, z1, x2, y2, z2 = args
+    elif len(args) == 2:
+        x1, y1, z1 = general_n2c(args[0])
+        x2, y2 ,z2 = general_n2c(args[1])
+    else:
+        raise TypeError('lineOfSight() take either 2 or 6 arguments')
+
 
     dx, dy, dz = x2 - x1,       y2 - y1,        z2 - z1
     ax, ay, az = abs(dx)*2,     abs(dy)*2,      abs(dz)*2
@@ -562,7 +571,7 @@ def findCoarsePath(L):
     new_waypoints = [gl.start, gl.goal]
 
     for level in xrange(gl.numlevels,0,-1):        # for all levels except level 0
-        if distance > 6*L[level].maxlength:     # only for big enough distances
+        if distance > distancerequirement*L[level].maxlength:     # only for big enough distances
             try:
                 new_waypoints = L[level].computeShortestCoarsePath(new_waypoints)
                 #new_waypoints = L[level].computeShortestPathWithWaypoints(new_waypoints)
@@ -606,7 +615,6 @@ class CL:   # Create level
         self.S = {gl.start:[], gl.goal:[]}
         self.clusterStart = self.fromL0ToCluster(gl.start)
         self.clusterGoal  = self.fromL0ToCluster(gl.goal)
-    #    self.nodesByCluster = {i:[] for i in xrange(1,self.numclusters+1)}
 
 
     def c2n(self,x,y,z):
@@ -705,27 +713,32 @@ class CL:   # Create level
                 self.remove_node(u)
 
 
-    def getCoarseCost(self,us,ut):
+    def getCoarseCost(self,xs,ys,zs,ut):
         """
         :param us: source node
         :param ut: target node
         :return: cost of moving from us to ut for abstract levels
         """
 
-        if not lineOfSight(us,ut):
-            return float('inf')
+        # Check line of sight if closest node is within search radius of current location
+     #  xs, ys, zs = general_n2c(us)
+        xt, yt, zt = general_n2c(ut)
+
+        # We search from goal to start
+        dx1, dy1, dz1 = gl.startX-xs, gl.startY-ys, gl.startZ-zs
+        dx2, dy2, dz2 = gl.startX-xt, gl.startY-yt, gl.startZ-zt
+
+        if min(dx1*dx1 + dy1*dy1 + dz1*dz1, dx2*dx2 + dy2*dy2 + dz2*dz2) <= searchRadiusSquared:
+            if not lineOfSight(xs,ys,zs,xt,yt,zt):
+                return float('inf')
+
+        dx, dy, dz = xs-xt, ys-yt, zs-zt
+        if zs != zt:
+            sf = cZ     # scale factor
         else:
-            xs, ys, zs = general_n2c(us)
-            xt, yt, zt = general_n2c(ut)
+            sf = max(cX, cY)
 
-            dx, dy, dz = xs-xt, ys-yt, zs-zt
-
-            if zs != zt:
-                sf = cZ     # scale factor
-            else:
-                sf = max(cX, cY)
-
-            return sf * sqrt(dx*dx + dy*dy + dz*dz)
+        return sf * sqrt(dx*dx + dy*dy + dz*dz)
 
 
     def getCost(self,us,ut):
@@ -921,9 +934,12 @@ class CL:   # Create level
                 k1, k2 = self.calcKey(startnode, startnode)
 
             # Get the backpointers
-            nextpos = np.array([startnode])
+            # nextpos = np.array([startnode])
+            # while nextpos[-1] != goalnode:
+            #     nextpos = np.append(nextpos, CL.bptr[nextpos[-1]])
+            nextpos = [startnode]
             while nextpos[-1] != goalnode:
-                nextpos = np.append(nextpos, CL.bptr[nextpos[-1]])
+                nextpos.append(CL.bptr[nextpos[-1]])
 
             new_waypoints.extend(nextpos[0:-1])
 
@@ -951,7 +967,6 @@ class CL:   # Create level
         return centerX, centerY, centerZ
 
 
-
     def coarse_succ(self,s,startnode,startx,starty,startz):
         """ Find which nodes can be moved to next from node s"""
         xs, ys, zs = general_n2c(s) #S[s]
@@ -961,14 +976,14 @@ class CL:   # Create level
         succNode = [s + sizeX*self.lengthX - (zMove*self.lengthZ*zf1+zf2)]
 
         appSN = succNode.append
-        appSN(s + sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                      + 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX                    - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                      - 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s + sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                                         - (zMove*self.lengthZ*zf1+zf2))
+        appSN(s + sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                      + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX + 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX                    - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                      - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s + sizeX*self.lengthX - 1*self.lengthY   - (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                                         - (zMove*self.lengthZ*zf1 + zMove*zf2))
 
         # Same plane
         appSN(s + sizeX*self.lengthX)
@@ -981,15 +996,15 @@ class CL:   # Create level
         appSN(s + sizeX*self.lengthX - 1*self.lengthY)
 
         # One up in z-direction
-        appSN(s + sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s + sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                      + 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s - sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                      - 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s + sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1+zf2))
-        appSN(s                                       + (zMove*self.lengthZ*zf1+zf2))
+        appSN(s + sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s + sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                      + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX + 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX                  + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s - sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                      - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s + sizeX*self.lengthX - 1*self.lengthY + (zMove*self.lengthZ*zf1 + zMove*zf2))
+        appSN(s                                       + (zMove*self.lengthZ*zf1 + zMove*zf2))
 
         # Nodes to delete when on a boundary
         if xs > sizeX - self.lengthX:
@@ -1016,6 +1031,7 @@ class CL:   # Create level
         dx, dy, dz = abs(xs-startx), abs(ys-starty), abs(zs-startz)
         if max(dx,dy,dz) <= self.maxlength:
             appSN(startnode)
+
         return succNode  # [sn for sn in succNode if sn > 0]
 
 
@@ -1027,13 +1043,16 @@ class CL:   # Create level
         """
 
         new_waypoints, startnode, goalnode = [], [], []
+        numloscalls = 0
         for idx, node in enumerate(waypoints[0:-1]):
             startnode, goalnode = node, waypoints[idx+1]
             startx, starty, startz = general_n2c(startnode)
             self.initialize(startnode,goalnode)
 
             kOld1, kOld2, u = self.pop_node()
+            gl.closed_coarse.append(u)
             k1, k2 = self.calcKey(startnode, startnode)
+
 
             while kOld1 < k1 or (kOld1 == k1 and kOld2 < k2) or CL.rhs[startnode] > CL.g[startnode]:
 
@@ -1045,10 +1064,11 @@ class CL:   # Create level
                     CL.g[u] = CL.rhs[u]
                     succU = self.coarse_succ(u,startnode,startx, starty, startz)
 
+                    x,y,z = general_n2c(u)
                     for s in succU:
-
-                        theCost = self.getCoarseCost(u, s)
+                        theCost = self.getCoarseCost(x,y,z, s)
                         if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
+                            numloscalls += 1
                             CL.bptr[s] = u
                             CL.rhs[s] = CL.g[u] + theCost
                             self.updateVertex(s, startnode)
@@ -1057,11 +1077,12 @@ class CL:   # Create level
                     succU = self.coarse_succ(u,startnode,startx, starty, startz)
                     for s in succU:
                         if s != goalnode and CL.bptr[s] == u:
-                            succS = self.succ_noDiag(s,startnode,goalnode)
+                            succS = self.coarse_succ(s,startnode,startx, starty, startz)
 
                             minArray = {}
+                            x,y,z = general_n2c(s)
                             for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.getCoarseCost(sp, s)
+                                minArray[sp] = CL.g[sp] + self.getCoarseCost(x,y,z, sp) #self.getCoarseCost(sp, s)
 
                             # Find min by comparing second element of each tuple
                             CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
@@ -1073,11 +1094,20 @@ class CL:   # Create level
 
                 kOld1, kOld2, u = self.pop_node()
                 k1, k2 = self.calcKey(startnode, startnode)
+                gl.closed_coarse.append(u)
 
             # Get the backpointers
-            nextpos = np.array([startnode])
+            # nextpos = np.array([startnode])
+            # while nextpos[-1] != goalnode:
+            #     nextpos = np.append(nextpos, CL.bptr[nextpos[-1]])
+            nextpos = [startnode]
             while nextpos[-1] != goalnode:
-                nextpos = np.append(nextpos, CL.bptr[nextpos[-1]])
+                nextpos.append(CL.bptr[nextpos[-1]])
+
+
+
+
+
 
             new_waypoints.extend(nextpos[0:-1])
 
