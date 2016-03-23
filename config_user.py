@@ -126,6 +126,7 @@ fig1 = plt.figure()
 ax1 = fig1.gca(projection='3d')
 
 # Used to save some variables
+hdl = []
 closed_coarse = 0
 closed_refined = 0
 closed_L0 = 0

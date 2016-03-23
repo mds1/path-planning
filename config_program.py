@@ -135,9 +135,8 @@ if gl.makeFigure:
     gl.ax1.set_xlim(xMin, xMax), gl.ax1.set_ylim(yMin, yMax), gl.ax1.set_zlim(zMin, zMax)
     gl.ax1.view_init(elev=44., azim= -168)
 
-#gl.ax1.set_aspect('equal','box')
 """
-Scaling is done from here...
+Scaling for plot is done from here...
 """
 x_scale=sizeX
 y_scale=sizeY
@@ -154,9 +153,6 @@ gl.ax1.get_proj=modified_proj
 """
 to here
 """
-
-# Create clusters
-
 
 # Determine number of levels
 gl.numlevels = 1

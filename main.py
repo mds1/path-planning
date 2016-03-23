@@ -45,55 +45,25 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
     xNew, yNew, zNew = gl.start                         # get current location
     fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
     while gl.start != gl.goal:
-        oldstart, oldgoal = gl.start, gl.goal         # Line 48 of Moving Target D*Lite
+        oldstart, oldgoal = gl.start, gl.goal           # Line 48 of Moving Target D*Lite
 
         # 1. Compute coarsest feasible hierarchical path
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
         nextpos = fcn.findCoarsePath(L)
-
-        # X,Y,Z = [], [], []
-        # if gl.stepCount > 1:
-        #     hdl.remove()
-        # for node in nextpos:
-        #     x,y,z = node
-        #     X.append(x), Y.append(y), Z.append(z)
-        # hdl = gl.ax1.scatter(X,Y,Z, c='y', s=5)
+        #fcn.plotResultingWaypoints(nextpos, 'y', 5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)
+        #fcn.plotResultingWaypoints(nextpos, 'b', 5)
 
-        # X,Y,Z = [], [], []
-        # if gl.stepCount > 1:
-        #     hdl.remove()
-        # for node in nextpos:
-        #     x,y,z = node
-        #     X.append(x), Y.append(y), Z.append(z)
-        # hdl = gl.ax1.scatter(X,Y,Z, c='y', s=5)
-
-        #gl.ax1.scatter(gl.start[0], gl.start[1], gl.start[2], c='y', s=20)
 
         validCoarsePath = True
         while validCoarsePath and gl.start != gl.goal:
 
-
             # 3. Identify waypoints along this path, a distance apart equal to smallest cluster dimension
-            new_waypts = fcn.fromCoarseToWaypoints(nextpos, L)                    # coordinates
-            # Rounded to exact coordinates for use search and update function
-            new_waypts_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in new_waypts]
-
-
-            # for idx,node in enumerate(new_waypoints[0:-1]):
-            #     #x1,y1,z1 = new_waypoints[idx]
-            #     #x2,y2,z2 = node
-            #     x1,y1,z1 = new_waypoints[idx]
-            #     x2,y2,z2 = new_waypoints[idx+1]
-            #     gl.ax1.plot([x1, x2], [y1, y2], [z1, z2], linewidth=2, c='y')
-
-            # for node in new_waypts:
-            #     x,y,z = node
-            #     gl.ax1.scatter(x,y,z, c='c', s=5, alpha=0.3)
-
+            new_waypts = fcn.fromCoarseToWaypoints(nextpos)  # series of coordinates to simulate UAV movement
+            new_waypts_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in new_waypts]  # rounded, for search and update
 
             # 4. Compute the shortest level 0 path to each waypoint
             for waypoint in new_waypts:
@@ -106,19 +76,15 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 pathToFollow = fcn.postSmoothPath(pathToFollow)
                 nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
                 nextcoords_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
+
                 # Line 53 of Moving Target D* Lite is computed within below while loop
                 # Line 54 of Moving Target D* Lite begins here
                 goalMoved, validCoarsePath, validL0Path = False, True, True
-
                 while not goalMoved and validCoarsePath and validL0Path:
-                    # Save current position
+                    # Save current position, then move to next point
                     xOld, yOld, zOld = xNew, yNew, zNew
-
-                    # Move to the next point and remove it from the list
                     xNew, yNew, zNew = nextcoords.pop()
-
-                    # Update start coordinate
-                    gl.start = (round(xNew), round(yNew), round(zNew))
+                    gl.start = (round(xNew), round(yNew), round(zNew))   # update start coordinate
 
                     # Plot movement and save figure
                     if makeMovie:
@@ -128,7 +94,8 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                     gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
 
                     # Generate random obstacles
-                    if makeRandObs:     fcn.genRandObs(minObs,maxObs,maxPercent,seedDyn)
+                    if makeRandObs:
+                        fcn.genRandObs(minObs,maxObs,maxPercent,seedDyn)
 
                     # Moving goal execution
                     if useMovingGoals:
@@ -183,8 +150,11 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
 
 
-print 'Run succeeded!'
-print 'Elapsed time: ' + str(time.time() - tic) + ' seconds'
+print 'Run succeeded!\n'
+print 'Coarse Expansions: ' + str(gl.closed_coarse)
+print 'Refined Expansions: ' + str(gl.closed_refined)
+print 'Level 0 Expansions: ' + str(gl.closed_L0)
+print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
 
 if makeMovie:
     # Save a few extra still frame so video doesn't end abruptly

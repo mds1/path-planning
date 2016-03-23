@@ -455,11 +455,10 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     return validCoarsePath, validL0Path
 
 
-def fromCoarseToWaypoints(nextpos,L):
+def fromCoarseToWaypoints(nextpos):
     """
     :param nextpos: smoothed coarse path to follow
-    :param L: Levels
-    :return: set of coordinates to travel to
+    :return: set of coordinates to travel to between waypoints, in order to simulate UAV movemement
     """
     new_waypoints = []
     for i in xrange(len(nextpos)-1):
@@ -538,6 +537,21 @@ def findCoarsePath(L):
 
     return new_waypoints
 
+
+def plotResultingWaypoints(waypoints,color,size):
+    """
+    Useful for debugging, plots coarse waypoints for current coarse path, then removes them and shows the new ones
+    for subsequent coarse paths
+    :param waypoints: vector of coarse nodes
+    :return: updates plot with scatter points of each waypoint
+    """
+    X,Y,Z = [], [], []
+    if gl.stepCount > 1:
+        gl.hdl.remove()
+    for node in waypoints:
+        x,y,z = node
+        X.append(x), Y.append(y), Z.append(z)
+    gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
 
 
 """ Creating classes """
@@ -631,6 +645,12 @@ class CL:   # Create level
                 self.remove_node(u)
 
 
+    """
+
+    Hierarchical Functions
+
+    """
+
     def getCoarseCost(self,us,ut):
         """
         :param xs,ys,zs: source node, us, coordinates
@@ -709,24 +729,6 @@ class CL:   # Create level
         #     return cX*1.414213562 # 1.414213562 = sqrt(2)  # used cX, since cX=cY
         # else:
         #     return cZ*1.732050808 # 1.732050808 = sqrt(3)
-
-
-
-    """
-
-    Hierarchical Functions
-
-    """
-
-
-    # def fromL0ToCluster(self,s):
-    #     """ Convert from Level 0 node to cluster number of current level """
-    #     x,y,z = s
-    #     clusterX = ceil(x/self.lengthX)
-    #     clusterY = ceil(y/self.lengthY)
-    #     clusterZ = ceil(z/self.lengthZ)
-    #
-    #     return self.c2n(clusterX, clusterY, clusterZ)
 
 
     def coarse_succ(self,s,startnode):
