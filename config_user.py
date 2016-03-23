@@ -25,7 +25,7 @@ mostcoarsecluster = 4   # successive clusters have 4x fewer nodes in each direct
 # Global Cost Scale Factors / Other Settings
 mapscale = 4
 searchRadius = 20
-cX, cY, cZ = 1, 1, 1
+cX, cY, cZ = 1, 1, 2
 heuristicScale = 1.01
 zf1, zf2 = 1, 0             # provides more flexibility over z-movement; zf1 = multiplier, zf2 = added constant
 distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
@@ -46,7 +46,7 @@ sizeY = 64 * mapscale
 sizeZ = 32 * mapscale
 startX = 3 * mapscale
 startY = 4 * mapscale
-startZ = 7 * mapscale
+startZ = 6 * mapscale
 goals = np.array([[62., 60., 6.,    0., 0.]])  * mapscale
 #goals = np.array([[15., 8., 10.,    0., 0.], [23., 23., 19.,    0., 0.]])  * mapscale
 # 0 placeholders are for node and cantor function

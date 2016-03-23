@@ -475,7 +475,7 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
         oX, oY, oZ = point
         #obsLoc = general_c2n(oX,oY,oZ)
         obsLoc = oX + sizeX * (oY - 1) + zMove * (oZ - 1)
-        if gl.map_[obsLoc] == - 2:
+        if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
 
             # Mark obstacles within search radius
             if max([abs(oX-xNew), abs(oY-yNew), abs(oZ-zNew)]) <= searchRadius:

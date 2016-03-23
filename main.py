@@ -54,13 +54,26 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         # for node in nextpos:
         #     x,y,z = fcn.general_n2c(node)
         #     gl.ax1.scatter(x,y,z, c='b', s=5)
+        X,Y,Z = [], [], []
+        if gl.stepCount > 1:
+            hdl.remove()
+            #gl.ax1.draw()
+        for node in nextpos:
+            x,y,z = fcn.general_n2c(node)
+            X.append(x), Y.append(y), Z.append(z)
+        hdl = gl.ax1.scatter(X,Y,Z, c='y', s=5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)
-        nextpos = [node for node in nextpos if not math.isinf(gl.costMatrix[node])]
-        # for node in nextpos:
-        #     x,y,z = fcn.general_n2c(node)
-        #     gl.ax1.scatter(x,y,z, c='y', s=5)
+     #   nextpos = [node for node in nextpos if not math.isinf(gl.costMatrix[node])]
+     #    X,Y,Z = [], [], []
+     #    if gl.stepCount > 1:
+     #        hdl.remove()
+     #        #gl.ax1.draw()
+     #    for node in nextpos:
+     #        x,y,z = fcn.general_n2c(node)
+     #        X.append(x), Y.append(y), Z.append(z)
+     #    hdl = gl.ax1.scatter(X,Y,Z, c='y', s=5)
 
         #gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='y', s=20)
 
@@ -85,7 +98,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
             #     x,y,z = node
             #     gl.ax1.scatter(x,y,z, c='c', s=5, alpha=0.3)
 
-            hdl = []
+
             # 4. Compute the shortest level 0 path to each waypoint
             for waypoint in new_waypts:
                 wpX,wpY,wpZ = waypoint
