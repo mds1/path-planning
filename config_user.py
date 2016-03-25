@@ -19,14 +19,14 @@ dpi = 100           # higher = better quality, slower runtime (300
 imgformat = 'png'   # currently only works for png
 
 # Cluster Settings
-minclustersize = 8      # min dimension of a cluster is 8 L0 nodes
+minclustersize = 4      # min dimension of a cluster is 8 L0 nodes
 mostcoarsecluster = 4   # successive clusters have 4x fewer nodes in each direction
 
 # Global Cost Scale Factors / Other Settings
-mapscale = 4
+mapscale = 1
 searchRadius = 20
 cX, cY, cZ = 1, 1, 1
-heuristicScale = 1.01
+heuristicScale = 1
 zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
                                 # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
 distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
@@ -63,10 +63,10 @@ obstacles = np.array([])
 
 # Fixed Rectangular Obstacles
 rXstart = [8,  12, 15,  35, 41, 49]
-rYstart = [3,  15, 35, 10, 20, 47]
+rYstart = [2,  15, 35, 10, 20, 47]
 rZstart = [1,  1,  1,  1,  1,  1]
 rXdim =   [4,  20, 30, 5,  8,  6]
-rYdim =   [8,  12, 8,  5,  8,  6]
+rYdim =   [9,  12, 8,  5,  8,  6]
 rZdim =   [30,  8, 15, 28, 20, 28]
 
 

@@ -38,6 +38,7 @@ if makeMovie:   frames = []
 
 """ Setup abstract levels """
 L = fcn.setupLevels()
+time_findCoarsePath = []
 
 #numlevels = 0
 """ Begin main algorithm """
@@ -50,11 +51,14 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         # 1. Compute coarsest feasible hierarchical path
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
+        tic = time.clock()
         nextpos = fcn.findCoarsePath(L)
+
         #fcn.plotResultingWaypoints(nextpos, 'y', 5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)
+        time_findCoarsePath.append(time.clock()-tic)
         #fcn.plotResultingWaypoints(nextpos, 'b', 5)
 
 
@@ -147,14 +151,18 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
 
 
+mean_time_findCoarsePath = sum(time_findCoarsePath)/len(time_findCoarsePath)
 
 
 
 print 'Run succeeded!\n'
 print 'Coarse Expansions: ' + str(gl.closed_coarse)
-print 'Refined Expansions: ' + str(gl.closed_refined)
+print 'Refinement Expansions: ' + str(gl.closed_refined)
 print 'Level 0 Expansions: ' + str(gl.closed_L0)
+
 print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
+print 'Mean findCoarsePath Time: ' + str(mean_time_findCoarsePath*1000) + ' ms'
+print time_findCoarsePath
 
 if makeMovie:
     # Save a few extra still frame so video doesn't end abruptly

@@ -430,11 +430,10 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
 
     # Search them
     for obsLoc in searchRange:
-        oX, oY, oZ = obsLoc
         if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
 
             # Mark obstacles within search radius
-            if max([abs(oX-xNew), abs(oY-yNew), abs(oZ-zNew)]) <= searchRadius:
+            if max([abs(obsLoc[0]-xNew), abs(obsLoc[1]-yNew), abs(obsLoc[2]-zNew)]) <= searchRadius:
                 xR, yR, zR = round(xNew), round(yNew), round(zNew)
                 cellappend(obsLoc)
 
@@ -659,19 +658,18 @@ class CL:   # Create level
         """
 
         # Check line of sight if closest node is within search radius of current location
-        xs, ys, zs = us
-        xt, yt, zt = ut
+
 
         # We search from goal to start
-        dx1, dy1, dz1 = gl.start[0]-xs, gl.start[1]-ys, gl.start[2]-zs
-        dx2, dy2, dz2 = gl.start[0]-xt, gl.start[1]-yt, gl.start[2]-zt
+        dx1, dy1, dz1 = gl.start[0]-us[0], gl.start[1]-us[1], gl.start[2]-us[2]
+        dx2, dy2, dz2 = gl.start[0]-ut[0], gl.start[1]-ut[1], gl.start[2]-ut[2]
 
         if dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
             if not lineOfSight(us,ut):
                 return float('inf')
 
-        dx, dy, dz = xs-xt, ys-yt, zs-zt
-        if zs != zt:
+        dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
+        if us[2] != ut[2]:
             sf = cZ     # scale factor
         else:
             sf = max(cX, cY)
@@ -685,11 +683,9 @@ class CL:   # Create level
         :param ut: target node number
         :return: cost of moving from us to ut for abstract levels, disregarding line of sight
         """
-        xs, ys, zs = us
-        xt, yt, zt = ut
 
-        dx, dy, dz = xs-xt, ys-yt, zs-zt
-        if zs != zt:
+        dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
+        if us[2] != ut[2]:
             sf = cZ     # scale factor
         else:
             sf = max(cX, cY)
@@ -707,28 +703,18 @@ class CL:   # Create level
 
         if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
             return float('inf')
-        elif restrictVerticalMovement and abs(us-ut) == zMove:
-            return float('inf')
+        elif restrictVerticalMovement:
+            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
+                return float('inf')
 
-        xs, ys, zs = us
-        xt, yt, zt = ut
 
-        dx, dy, dz = xs-xt, ys-yt, zs-zt
-        if zs != zt:
+        dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
+        if us[2] != ut[2]:
             sf = cZ     # scale factor
         else:
             sf = max(cX, cY)
 
         return sf * sqrt(dx*dx + dy*dy + dz*dz)
-
-        # if abs(us-ut) == 1:
-        #     return cX*1
-        # elif abs(us-ut) == sizeX:
-        #     return cY*1
-        # elif abs(us-ut) == sizeX+1 or abs(us-ut) == sizeX-1:
-        #     return cX*1.414213562 # 1.414213562 = sqrt(2)  # used cX, since cX=cY
-        # else:
-        #     return cZ*1.732050808 # 1.732050808 = sqrt(3)
 
 
     def coarse_succ(self,s,startnode):
