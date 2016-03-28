@@ -82,6 +82,7 @@ bptr = collections.defaultdict(None)
 g[gl.start] = 0
 bptr[gl.start] = None
 add_node(fcn.heuristic(gl.start, gl.goal), gl.start)
+total_cost = 0
 
 while U:
     f_u, u = pop_node()
@@ -117,11 +118,13 @@ for node in path:
     xNew, yNew, zNew = node
 
     gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#60BD68')
+    total_cost += L.getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
     gl.goal = (xNew, yNew, zNew)
 
 
 print 'Run succeeded!\n'
 print 'Level 0 Expansions: ' + str(len(closed))
+print 'Path Cost: ' + str(total_cost)
 
 #print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
 #print 'Mean findCoarsePath Time: ' + str(mean_time_findCoarsePath*1000) + ' ms'

@@ -91,7 +91,6 @@ def succ(s):
 
 def cantor(x,y,z):
     """
-
     :param x, y, z: node coordinates
     :return: single unique integer of the 3 coordinates using cantor pairing function
     """
@@ -116,7 +115,7 @@ def rectObs(dimX, dimY, dimZ, locX, locY, locZ,):
     return np.column_stack((obsLocX, obsLocY, obsLocZ))
 
 
-def plotRectObs(x, y, z, xd, yd, zd, axisname):
+def plotRectObs(x, y, z, xd, yd, zd, alpha, axisname):
     """
     :param x, y, z: coordinates of the obstacle
     :param xd, yd, zd: width of the obstacle
@@ -138,7 +137,6 @@ def plotRectObs(x, y, z, xd, yd, zd, axisname):
     # Add polygon to axis
     poly3d = [[tupleList[vertlist[ix][iy]] for iy in xrange(len(vertlist[0]))] for ix in xrange(len(vertlist))]
     #axisname.scatter(xvec, yvec, zvec)
-    alpha = 0.2
     collection = Poly3DCollection(poly3d, linewidth=1, alpha=alpha)
     collection.set_color([0, 0, 0, alpha])
     axisname.add_collection3d(collection)
@@ -318,7 +316,7 @@ def genRandObs(minObs, maxObs, maxPercent, seed):
 
         # Add new obstacle to plot
         if makeFigure:
-            plotRectObs(newX, newY, newZ, 1, 1, 1, gl.ax1)
+            plotRectObs(newX, newY, newZ, 1, 1, 1, 0.2, gl.ax1)
 
 
 def movingGoal(initX, initY, initZ, T):
@@ -371,16 +369,12 @@ def clusterDimCheck():
     if not (isPowerOfTwo(gl.minclustersize)):
         raise ValueError('Value of all \'minclustersize\' must be a power of 2')
 
-    if not isPowerOfTwo(gl.mostcoarsecluster):
-        raise ValueError('Value of \'mostcoarsecluster\' must be a power of 2')
-
 
 def setupLevels():
     """
     :return: Dictionary of all hierarchical levels
     """
     L = {}
-
 
     for level in xrange(gl.numlevels,-1,-1):
     # Get dimensions for each level
@@ -393,14 +387,11 @@ def setupLevels():
             lsize = max(sizeX/(2**sf), sizeY/(2**sf), sizeZ/(2**sf))
             lsizeX, lsizeY, lsizeZ = lsize, lsize, lsize
 
-            if lsizeX < minclustersize:  lsizeX = minclustersize
-            if lsizeY < minclustersize:  lsizeY = minclustersize
-            if lsizeZ < minclustersize:  lsizeZ = minclustersize
+            if lsizeX > sizeX/minclustersize:  lsizeX = sizeX/minclustersize
+            if lsizeY > sizeY/minclustersize:  lsizeY = sizeY/minclustersize
+            if lsizeZ > sizeZ/minclustersize:  lsizeZ = sizeZ/minclustersize
 
             L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
-          #  L[level].preprocessing()
-
-
 
     return L
 
@@ -440,6 +431,11 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
                 gl.map_[obsLoc] = - 1
                 cOld = gl.costMatrix[obsLoc]
                 gl.costMatrix[obsLoc] = float('inf')
+
+
+                # for obsSucc in succ(obsLoc):  # mark successors for safety margin
+                #     gl.costMatrix[obsSucc] = float('inf')
+                #         #plotRectObs(obsSucc[0], obsSucc[1], obsSucc[2], 1, 1, 1, 0.1, gl.ax1)
 
                 # See if any are on current path, and if so, recalculate path
                 if args:
@@ -531,9 +527,20 @@ def findCoarsePath(L):
                 continue
 
     if level != 1:
-        for newlevel in xrange(level-1,0,-1):
-            new_waypoints = L[newlevel].computeRefinedCoarsePath(new_waypoints)
+        refined_waypoints = list(new_waypoints)
+        for idx,waypoint in enumerate(new_waypoints):
+            if euclideanDistance(gl.start,waypoint) <= searchRadius:
+                new_waypoints.pop(0)
+            else:
+                new_waypoints.pop(0)
+                final_point = waypoint
+                refined_waypoints = refined_waypoints[0:idx+1]
+                break
 
+        for newlevel in xrange(level-1,0,-1):
+            refined_waypoints = L[newlevel].computeRefinedCoarsePath(refined_waypoints)
+
+        new_waypoints[:0] = refined_waypoints
     return new_waypoints
 
 
@@ -551,6 +558,14 @@ def plotResultingWaypoints(waypoints,color,size):
         x,y,z = node
         X.append(x), Y.append(y), Z.append(z)
     gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
+
+
+def updateTotalCost(us,ut):
+    """
+    :param us: source node
+    :param ut: target node
+    :return: additional cost added by traveling between those two nodes
+    """
 
 
 """ Creating classes """
@@ -573,7 +588,7 @@ class CL:   # Create level
         self.maxlength = max(self.lengthX, self.lengthY, self.lengthZ)
         self.minlength = min(self.lengthX, self.lengthY, self.lengthZ)
         self.numNodes = self.sizeX*self.sizeY*self.sizeZ
-        
+
         self.E = []
         self.appE = self.E.append
         self.S = {gl.start:[], gl.goal:[]}
@@ -645,9 +660,7 @@ class CL:   # Create level
 
 
     """
-
     Hierarchical Functions
-
     """
 
     def getCoarseCost(self,us,ut):
@@ -707,8 +720,11 @@ class CL:   # Create level
             if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
                 return float('inf')
 
+        # if us[2] == 1 or ut[2] == 1 or us[2] == 0 or ut[2] == 0:
+        #     return float('inf')
 
         dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
+
         if us[2] != ut[2]:
             sf = cZ     # scale factor
         else:
@@ -983,11 +999,3 @@ class CL:   # Create level
         new_waypoints.append(goalnode)
 
         return new_waypoints
-
-
-
-
-
-
-
-

@@ -39,6 +39,9 @@ if makeMovie:   frames = []
 """ Setup abstract levels """
 L = fcn.CL(0, sizeX, sizeY, sizeZ)
 time_findL0Path = []
+time_smoothL0Path = []
+total_cost = 0
+path = [gl.start]
 
 #numlevels = 0
 """ Begin main algorithm """
@@ -49,12 +52,10 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         oldstart, oldgoal = gl.start, gl.goal           # Line 48 of Moving Target D*Lite
 
 
-        tic = time.clock()
+        tic1 = time.clock()
         pathToFollow = L.computeShortestL0Path([gl.start, gl.goal])   # get path
-        time_findL0Path.append(time.clock()-tic)
-
-
         pathToFollow = fcn.postSmoothPath(pathToFollow)
+        time_findL0Path.append(time.clock()-tic1)
         nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
         nextcoords_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
 
@@ -73,6 +74,8 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
                 frames.append(fname)
             gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
+            total_cost += L.getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
+            path.append((xNew,yNew,zNew))
 
             # Generate random obstacles
             if makeRandObs:
@@ -121,18 +124,15 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
 
 
-
-mean_time_findL0Path = sum(time_findL0Path)/len(time_findL0Path)
-
-
-
 print 'Run succeeded!\n'
 
-print 'Level 0 Expansions: ' + str(gl.closed_L0)
+# Get averages, in milliseconds
+mean_time_findL0Path = 1000*sum(time_findL0Path)/len(time_findL0Path)
 
-print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
-print 'Mean findL0Path Time: ' + str(mean_time_findL0Path*1000) + ' ms'
-print time_findL0Path
+
+def dstar_outputs():
+    return total_cost, gl.closed_L0, mean_time_findL0Path, path
+
 
 
 if makeFigure:

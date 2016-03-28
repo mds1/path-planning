@@ -19,25 +19,27 @@ dpi = 100           # higher = better quality, slower runtime (300
 imgformat = 'png'   # currently only works for png
 
 # Cluster Settings
-minclustersize = 4      # min dimension of a cluster is 8 L0 nodes
-mostcoarsecluster = 4   # successive clusters have 4x fewer nodes in each direction
+minclustersize = 4      # min dimension of a cluster is this many L0 nodes (4 recommended for shorter paths)
+
 
 # Global Cost Scale Factors / Other Settings
-mapscale = 1
+mapscale = 2
+safetymargin = 0
 searchRadius = 20
 cX, cY, cZ = 1, 1, 1
-heuristicScale = 1
+heuristicScale = 1.01
 zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
                                 # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
 distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
                                 # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
-distancerequirement = 4    # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
+distancerequirement = 6    # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
                                 # distance >= distancerequirement*maxclusterdimension
+                                # too small and it runs for very long and may not find a path, >=6 recommended
 
 startWithEmptyMap = True
 smoothPath = False
 makeRandObs = False
-useMovingGoals =False
+useMovingGoals = False
 restrictVerticalMovement = False
 
 
@@ -98,12 +100,15 @@ np.random.seed(seedStatic)
 initX = [mapscale*point for point in initX]
 initY = [mapscale*point for point in initY]
 initZ = [mapscale*point for point in initZ]
-rXstart = [mapscale*point for point in rXstart]
-rYstart = [mapscale*point for point in rYstart]
-rZstart = [mapscale*point for point in rZstart]
-rXdim = [mapscale*point for point in rXdim]
-rYdim = [mapscale*point for point in rYdim]
-rZdim = [mapscale*point for point in rZdim]
+
+rXstart = [mapscale*(point) for point in rXstart if point >= 1]
+rYstart = [mapscale*(point) for point in rYstart if point >= 1]
+rZstart = [mapscale*(point) for point in rZstart if point >= 1]
+rXdim = [mapscale*(point) for point in rXdim if point <= sizeX]
+rYdim = [mapscale*(point) for point in rYdim if point <= sizeY]
+rZdim = [mapscale*(point) for point in rZdim if point <= sizeZ]
+
+
 
 if makeMovie:
     makeFigure = True
@@ -131,8 +136,3 @@ closed_coarse = 0
 closed_refined = 0
 closed_L0 = 0
 output = {}
-
-
-
-
-

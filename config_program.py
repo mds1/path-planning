@@ -3,8 +3,10 @@ import time
 import math
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 import config_user as gl
 import all_functions as fcn
+
 # Create local copies of constants
 sizeX, sizeY, sizeZ, zMove = gl.sizeX, gl.sizeY, gl.sizeZ, gl.sizeX * gl.sizeY
 rXstart, rYstart, rZstart, rXdim, rYdim, rZdim = gl.rXstart, gl.rYstart, gl.rZstart, gl.rXdim, gl.rYdim, gl.rZdim
@@ -103,7 +105,7 @@ for i in xrange(0,len(rXstart)):
 
     # Define each pair of x,y,z coordinates. Each column is a vertex
     if gl.makeFigure:
-        fcn.plotRectObs(rXstart[i], rYstart[i], rZstart[i], rXdim[i], rYdim[i], rZdim[i], gl.ax1)
+        fcn.plotRectObs(rXstart[i], rYstart[i], rZstart[i], rXdim[i], rYdim[i], rZdim[i], 0.2, gl.ax1)
 
     rLoc = fcn.rectObs(rXdim[i], rYdim[i], rZdim[i], rXstart[i], rYstart[i], rZstart[i])
 
@@ -122,6 +124,11 @@ for obs in gl.obstacles:
     elif not gl.startWithEmptyMap:
         gl.map_[obsLoc] = -1                     # mark as known obstacle
         gl.costMatrix[obsLoc] = float('inf')
+        for obsSucc in fcn.succ(obsLoc):
+            gl.map_[obsLoc] = -1                     # mark as known obstacle
+            gl.costMatrix[obsLoc] = float('inf')
+
+
     else:
         raise ValueError('\'startWithEmptymap\' must be equal to True or False')
 
@@ -134,6 +141,7 @@ if gl.makeFigure:
     gl.ax1.set_xlabel('x'), gl.ax1.set_ylabel('y'), gl.ax1.set_zlabel('z')
     gl.ax1.set_xlim(xMin, xMax), gl.ax1.set_ylim(yMin, yMax), gl.ax1.set_zlim(zMin, zMax)
     gl.ax1.view_init(elev=44., azim= -168)
+    gl.ax1.locator_params(axis='z',nbins=6)
 
 """
 Scaling for plot is done from here...
@@ -158,6 +166,5 @@ to here
 gl.numlevels = 1
 maxdim = max(sizeX, sizeY, sizeZ)
 while maxdim > gl.minclustersize:
-    maxdim = maxdim / gl.mostcoarsecluster
+    maxdim = maxdim / 4
     gl.numlevels += 1
-

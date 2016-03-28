@@ -39,6 +39,11 @@ if makeMovie:   frames = []
 """ Setup abstract levels """
 L = fcn.setupLevels()
 time_findCoarsePath = []
+time_smoothCoarsePath = []
+time_findL0Path = []
+time_smoothL0Path = []
+total_cost = 0
+path = [gl.start]
 
 #numlevels = 0
 """ Begin main algorithm """
@@ -51,15 +56,14 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         # 1. Compute coarsest feasible hierarchical path
                 # for moving goal: when it moves, check cluster. if new cluster, modify successors
                 # for clusters, try only using one "entrance" in the center of each cluster
-        tic = time.clock()
+        tic1 = time.clock()
         nextpos = fcn.findCoarsePath(L)
-
-        #fcn.plotResultingWaypoints(nextpos, 'y', 5)
+#        fcn.plotResultingWaypoints(nextpos, 'y', 5)
 
         # 2. Smooth out the lowest level path, which becomes the general path we follow to the goal
         nextpos = fcn.postSmoothPath(nextpos)
-        time_findCoarsePath.append(time.clock()-tic)
-        #fcn.plotResultingWaypoints(nextpos, 'b', 5)
+        time_findCoarsePath.append(time.clock()-tic1)
+#        fcn.plotResultingWaypoints(nextpos, 'b', 5)
 
 
         validCoarsePath = True
@@ -73,11 +77,13 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
             for waypoint in new_waypts:
                 wpX,wpY,wpZ = waypoint
                 goalnode = (round(wpX),round(wpY),round(wpZ))
-                pathToFollow = L[0].computeShortestL0Path([gl.start, goalnode])   # get path
+                tic1 = time.clock()
+                pathToFollow = L[0].computeShortestL0Path([gl.start, goalnode])     # get path
 #                gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
 
                 # 5. Smooth the path and get the coordinates to move to
                 pathToFollow = fcn.postSmoothPath(pathToFollow)
+                time_findL0Path.append(time.clock()-tic1)
                 nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
                 nextcoords_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
 
@@ -96,6 +102,8 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                         plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
                         frames.append(fname)
                     gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
+                    total_cost += L[0].getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
+                    path.append((xNew,yNew,zNew))
 
                     # Generate random obstacles
                     if makeRandObs:
@@ -150,19 +158,18 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
 
 
+# Get averages, in milliseconds
+mean_time_findCoarsePath = 1000*sum(time_findCoarsePath)/len(time_findCoarsePath)
+mean_time_findL0Path = 1000*sum(time_findL0Path)/len(time_findL0Path)
 
-mean_time_findCoarsePath = sum(time_findCoarsePath)/len(time_findCoarsePath)
 
+def hpd_outputs():
+    return total_cost, gl.closed_coarse, gl.closed_refined, gl.closed_L0, mean_time_findCoarsePath, mean_time_findL0Path, path
 
 
 print 'Run succeeded!\n'
-print 'Coarse Expansions: ' + str(gl.closed_coarse)
-print 'Refinement Expansions: ' + str(gl.closed_refined)
-print 'Level 0 Expansions: ' + str(gl.closed_L0)
-
 print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
-print 'Mean findCoarsePath Time: ' + str(mean_time_findCoarsePath*1000) + ' ms'
-print time_findCoarsePath
+
 
 if makeMovie:
     # Save a few extra still frame so video doesn't end abruptly
@@ -186,9 +193,3 @@ if makeFigure:
     print 'Figure is open. Close figure to end script'
     plt.savefig('dstarFig.pdf',bbox_inches='tight')
     plt.show()
-
-
-
-
-
-
