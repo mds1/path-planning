@@ -74,7 +74,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
                 frames.append(fname)
             gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
-            total_cost += L.getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
+            total_cost += L.computeL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
             path.append((xNew,yNew,zNew))
 
             # Generate random obstacles

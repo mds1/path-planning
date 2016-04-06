@@ -118,7 +118,7 @@ for node in path:
     xNew, yNew, zNew = node
 
     gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#60BD68')
-    total_cost += L.getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
+    total_cost += L.computeL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
     gl.goal = (xNew, yNew, zNew)
 
 

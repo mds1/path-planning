@@ -2,12 +2,20 @@ from __future__ import division
 import time
 import os
 import subprocess
+import resource
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import config_user as gl
 import config_program
 import all_functions as fcn
-import config_user as gl
+
+total_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1e6
+if gl.testingMode:
+    reload(gl)
+    reload(config_program)
+    reload(fcn)
+
 
 
 """
@@ -45,6 +53,7 @@ time_smoothL0Path = []
 total_cost = 0
 path = [gl.start]
 
+
 #numlevels = 0
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
@@ -77,18 +86,30 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
             for waypoint in new_waypts:
                 wpX,wpY,wpZ = waypoint
                 goalnode = (round(wpX),round(wpY),round(wpZ))
+
+                if math.isinf(gl.costMatrix[goalnode]): # if a waypoint ends up on a blocked node
+                    continue
+
+
                 tic1 = time.clock()
                 pathToFollow = L[0].computeShortestL0Path([gl.start, goalnode])     # get path
-#                gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
+                #                gl.ax1.scatter(gl.startX, gl.startY, gl.startZ, c='m', s=5)
 
                 # 5. Smooth the path and get the coordinates to move to
                 pathToFollow = fcn.postSmoothPath(pathToFollow)
                 time_findL0Path.append(time.clock()-tic1)
+
+                if math.isinf(fcn.CL.rhs[gl.start]):
+                    print 'No path exists'
+                    raise KeyError('No path exists')
+
                 nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
                 nextcoords_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
 
+
                 # Line 53 of Moving Target D* Lite is computed within below while loop
                 # Line 54 of Moving Target D* Lite begins here
+
                 goalMoved, validCoarsePath, validL0Path = False, True, True
                 while not goalMoved and validCoarsePath and validL0Path:
                     # Save current position, then move to next point
@@ -101,8 +122,10 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                         fname = ('_tmp%05d.'+gl.imgformat) %gl.stepCount
                         plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
                         frames.append(fname)
-                    gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
-                    total_cost += L[0].getL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
+                    if gl.makeFigure:
+                        gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
+
+                    total_cost += L[0].computeL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
                     path.append((xNew,yNew,zNew))
 
                     # Generate random obstacles
@@ -123,14 +146,11 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                         goalMoved = True
                         break
 
-                    # # Recalculate coarse path if it becomes invalid
-                    # if goalMoved or newObsExist:
-                    #     break
-                    #
-                    if not validCoarsePath:
-                        break
 
-                if not validCoarsePath:
+
+
+
+                if not validCoarsePath or not validL0Path:
                     break
 
 
@@ -163,12 +183,13 @@ mean_time_findCoarsePath = 1000*sum(time_findCoarsePath)/len(time_findCoarsePath
 mean_time_findL0Path = 1000*sum(time_findL0Path)/len(time_findL0Path)
 
 
-def hpd_outputs():
-    return total_cost, gl.closed_coarse, gl.closed_refined, gl.closed_L0, mean_time_findCoarsePath, mean_time_findL0Path, path
 
+def hdstar_outputs():
+    return total_mem, total_cost, gl.closed_coarse, gl.closed_refined, gl.closed_L0, mean_time_findCoarsePath, mean_time_findL0Path, path
 
-print 'Run succeeded!\n'
-print '\nElapsed time: ' + str(time.time() - tic) + ' seconds'
+if not gl.testingMode:
+    print 'Run succeeded!\n'
+    print 'Elapsed time: ' + str(time.time() - tic) + ' seconds'
 
 
 if makeMovie:
@@ -190,6 +211,6 @@ if makeMovie:
     print 'Video complete!'
 
 if makeFigure:
+ #   plt.savefig('dstarFig.pdf',bbox_inches='tight')
     print 'Figure is open. Close figure to end script'
-    plt.savefig('dstarFig.pdf',bbox_inches='tight')
     plt.show()

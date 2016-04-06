@@ -25,6 +25,7 @@ restrictVerticalMovement = gl.restrictVerticalMovement
 minclustersize = gl.minclustersize
 distBetweenL0Paths = gl.distBetweenL0Paths
 distancerequirement = gl.distancerequirement
+refinementDistance = gl.refinementDistance
 
 
 zf1, zf2 = gl.zf1, gl.zf2
@@ -107,12 +108,16 @@ def rectObs(dimX, dimY, dimZ, locX, locY, locZ,):
     """
     obsLocX, obsLocY, obsLocZ = [],[],[]
     appX, appY, appZ = obsLocX.append, obsLocY.append, obsLocZ.append
+    obsLocs = []
+    obs_append = obsLocs.append
     for dx in xrange(0, dimX):
         for dy in xrange(0, dimY):
             for dz in xrange(0, dimZ):
                 appX(locX + dx), appY(locY + dy), appZ(locZ + dz)
+                obs_append((locX + dx, locY + dy, locZ + dz))
 
-    return np.column_stack((obsLocX, obsLocY, obsLocZ))
+    #return np.column_stack((obsLocX, obsLocY, obsLocZ))
+    return obsLocs
 
 
 def plotRectObs(x, y, z, xd, yd, zd, alpha, axisname):
@@ -192,63 +197,45 @@ def lineOfSight(*args):
 
             x1 += sx; yD += ay; zD += az
 
-            xCheck = round(0.5*(xk+x1))
-            yCheck = round(0.5*(yk+y1))
-            zCheck = round(0.5*(zk+z1))
-
-            voxCost = gl.costMatrix[(xCheck,yCheck,zCheck)]
-
-            if isinf(voxCost):
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
                 return False
-    else:
-        if ay >= max(ax,az):
-            xD = ax - ay/2
-            zD = az - ay/2
+    elif ay >= max(ax,az):
+        xD = ax - ay/2
+        zD = az - ay/2
 
-            while y1 != y2:
-                xk, yk, zk = x1, y1, z1
+        while y1 != y2:
+            xk, yk, zk = x1, y1, z1
 
-                if xD >= 0:
-                    x1 += sx
-                    xD -= ay
-                if zD >= 0:
-                    z1 += sz
-                    zD -= ay
+            if xD >= 0:
+                x1 += sx
+                xD -= ay
+            if zD >= 0:
+                z1 += sz
+                zD -= ay
 
-                y1 += sy; xD += ax; zD += az
+            y1 += sy; xD += ax; zD += az
 
-                xCheck = round(0.5*(xk+x1))
-                yCheck = round(0.5*(yk+y1))
-                zCheck = round(0.5*(zk+z1))
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
+                return False
 
-                voxCost = gl.costMatrix[(xCheck,yCheck,zCheck)]
-                if isinf(voxCost):
-                    return False
+    elif az > max(ax,ay):
+        xD = ax - az/2
+        yD = ay - az/2
 
-        else:
-            if az > max(ax,ay):
-                xD = ax - az/2
-                yD = ay - az/2
+        while z1 != z2:
+            xk, yk, zk = x1, y1, z1
 
-                while z1 != z2:
-                    xk, yk, zk = x1, y1, z1
+            if xD >= 0:
+                x1 += sx
+                xD -= az
+            if yD >= 0:
+                y1 += sy
+                yD -= az
 
-                    if xD >= 0:
-                        x1 += sx
-                        xD -= az
-                    if yD >= 0:
-                        y1 += sy
-                        yD -= az
+            z1 += sz; xD += ax; yD += ay
 
-                    z1 += sz; xD += ax; yD += ay
-
-                    xCheck = round(0.5*(xk+x1))
-                    yCheck = round(0.5*(yk+y1))
-                    zCheck = round(0.5*(zk+z1))
-
-                    voxCost = gl.costMatrix[(xCheck,yCheck,zCheck)]
-                    if isinf(voxCost):
-                        return False
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
+                return False
     return True
 
 
@@ -301,9 +288,7 @@ def genRandObs(minObs, maxObs, maxPercent, seed):
         # Don't place obstacle at start, goal, other obstacles, or within searchRadius
         if s_obs == gl.start:
             continue
-        if any(s_obs == gl.goals[:, 3]):
-            continue
-        if any(s_obs == gl.obstacles[:, 3]):
+        if s_obs in gl.goals:
             continue
 
         curX, curY, curZ = (gl.start)     # S[g.start]  # S[1,g.start], S[2,g.start], S[3,g.start]
@@ -414,10 +399,11 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     xmin, xmax = max(x-sr, 1), min(x+sr, sizeX)
     ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
     zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
-    for dx in xrange(xmin, xmax+1):
-        for dy in xrange(ymin, ymax+1):
-            for dz in xrange(zmin, zmax+1):
-                sr_append((dx,dy,dz))
+    # for dx in xrange(xmin, xmax+1):
+    #     for dy in xrange(ymin, ymax+1):
+    #         for dz in xrange(zmin, zmax+1):
+    #             sr_append((dx,dy,dz))
+    [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
 
     # Search them
     for obsLoc in searchRange:
@@ -425,17 +411,10 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
 
             # Mark obstacles within search radius
             if max([abs(obsLoc[0]-xNew), abs(obsLoc[1]-yNew), abs(obsLoc[2]-zNew)]) <= searchRadius:
-                xR, yR, zR = round(xNew), round(yNew), round(zNew)
                 cellappend(obsLoc)
 
                 gl.map_[obsLoc] = - 1
-                cOld = gl.costMatrix[obsLoc]
                 gl.costMatrix[obsLoc] = float('inf')
-
-
-                # for obsSucc in succ(obsLoc):  # mark successors for safety margin
-                #     gl.costMatrix[obsSucc] = float('inf')
-                #         #plotRectObs(obsSucc[0], obsSucc[1], obsSucc[2], 1, 1, 1, 0.1, gl.ax1)
 
                 # See if any are on current path, and if so, recalculate path
                 if args:
@@ -517,7 +496,7 @@ def findCoarsePath(L):
     distance = euclideanDistance(gl.start,gl.goal)
     new_waypoints = [gl.start, gl.goal]
 
-    for level in xrange(gl.numlevels,0,-1):        # for all levels except level 0
+    for level in xrange(gl.numlevels,-1,-1):        # for all levels
         if distance > distancerequirement*L[level].maxlength:     # only for big enough distances
             try:
                 new_waypoints = L[level].computeShortestCoarsePath(new_waypoints)
@@ -529,7 +508,7 @@ def findCoarsePath(L):
     if level != 1:
         refined_waypoints = list(new_waypoints)
         for idx,waypoint in enumerate(new_waypoints):
-            if euclideanDistance(gl.start,waypoint) <= searchRadius:
+            if euclideanDistance(gl.start,waypoint) <= refinementDistance:
                 new_waypoints.pop(0)
             else:
                 new_waypoints.pop(0)
@@ -629,23 +608,24 @@ class CL:   # Create level
         if u in CL.entry_finder:
             self.remove_node(u)
         CL.entry_finder[u] = [key1, key2, u]
-        heapq.heappush(CL.U, [key1,key2,u])
+        heapq.heappush(CL.U, [key1, key2, u])
 
 
     def remove_node(self, u):
         """ Mark an existing node as removed """
-        entry = CL.entry_finder.pop(u)
-        entry[-1] = '<removed-task>'
+       # entry = CL.entry_finder.pop(u)
+        del CL.entry_finder[u]
+      #  entry[-1] = '<removed-task>'
 
 
     def pop_node(self):
         """ Remove and return lowest priority task. Raise KeyError if empty """
-        while CL.U:
+        while True:
             key1, key2, u = heapq.heappop(CL.U)
             if u in CL.entry_finder:
-                if u is not '<removed-task>':
-                    del CL.entry_finder[u]
-                    return key1, key2, u
+                #if u is not '<removed-task>':
+                del CL.entry_finder[u]
+                return key1, key2, u
         raise KeyError('Attempted to pop from an empty priority queue')
 
 
@@ -663,7 +643,7 @@ class CL:   # Create level
     Hierarchical Functions
     """
 
-    def getCoarseCost(self,us,ut):
+    def computeCoarseCost(self, us, ut):
         """
         :param xs,ys,zs: source node, us, coordinates
         :param ut: target node number
@@ -677,7 +657,12 @@ class CL:   # Create level
         dx1, dy1, dz1 = gl.start[0]-us[0], gl.start[1]-us[1], gl.start[2]-us[2]
         dx2, dy2, dz2 = gl.start[0]-ut[0], gl.start[1]-ut[1], gl.start[2]-ut[2]
 
-        if dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
+        if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
+            return float('inf')
+        elif restrictVerticalMovement:
+            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
+                return float('inf')
+        elif dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
             if not lineOfSight(us,ut):
                 return float('inf')
 
@@ -690,12 +675,18 @@ class CL:   # Create level
         return sf * sqrt(dx*dx + dy*dy + dz*dz)
 
 
-    def getRefinedCoarseCost(self,us,ut):
+    def computeRefinedCost(self, us, ut):
         """
         :param xs,ys,zs: source node, us, coordinates
         :param ut: target node number
         :return: cost of moving from us to ut for abstract levels, disregarding line of sight
         """
+
+        if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
+            return float('inf')
+        elif restrictVerticalMovement:
+            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
+                return float('inf')
 
         dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
         if us[2] != ut[2]:
@@ -706,7 +697,7 @@ class CL:   # Create level
         return sf * sqrt(dx*dx + dy*dy + dz*dz)
 
 
-    def getL0Cost(self, us, ut):
+    def computeL0Cost(self, us, ut):
         """
         :param us: source node
         :param ut: target node
@@ -827,7 +818,7 @@ class CL:   # Create level
                     succU = self.coarse_succ(u,startnode)
 
                     for s in succU:
-                        theCost = self.getCoarseCost(u, s)
+                        theCost = self.computeCoarseCost(u, s)
                         if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
                             numloscalls += 1
                             CL.bptr[s] = u
@@ -842,7 +833,7 @@ class CL:   # Create level
 
                             minArray = {}
                             for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.getCoarseCost(s, sp) #self.getCoarseCost(sp, s)
+                                minArray[sp] = CL.g[sp] + self.computeCoarseCost(s, sp) #self.getCoarseCost(sp, s)
 
                             # Find min by comparing second element of each tuple
                             CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
@@ -893,7 +884,7 @@ class CL:   # Create level
                     succU = self.coarse_succ(u,startnode)
 
                     for s in succU:
-                        theCost = self.getRefinedCoarseCost(u, s)
+                        theCost = self.computeRefinedCost(u, s)
                         if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
                             numloscalls += 1
                             CL.bptr[s] = u
@@ -908,7 +899,7 @@ class CL:   # Create level
 
                             minArray = {}
                             for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.getRefinedCoarseCost(s, sp) #self.getCoarseCost(sp, s)
+                                minArray[sp] = CL.g[sp] + self.computeRefinedCost(s, sp) #self.getCoarseCost(sp, s)
 
                             # Find min by comparing second element of each tuple
                             CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
@@ -964,7 +955,7 @@ class CL:   # Create level
                     succU = succ(u)
 
                     for s in succU:
-                        theCost = self.getL0Cost(u, s)
+                        theCost = self.computeL0Cost(u, s)
                         if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
                             CL.bptr[s] = u
                             CL.rhs[s] = CL.g[u] + theCost
@@ -974,11 +965,11 @@ class CL:   # Create level
                     succU = succ(u)
                     for s in succU:
                         if s != goalnode and CL.bptr[s] == u:
-                            succS = self.succ_noDiag(s,startnode,goalnode)
+                            succS = succ(s)
 
                             minArray = {}
                             for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.getL0Cost(sp, s)
+                                minArray[sp] = CL.g[sp] + self.computeL0Cost(sp, s)
 
                             # Find min by comparing second element of each tuple
                             CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
