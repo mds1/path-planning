@@ -24,7 +24,7 @@ PROGRAM CONFIGURATION
 
 sizeX, sizeY, sizeZ, cX, cY, cZ = gl.sizeX, gl.sizeY, gl.sizeZ, gl.cX, gl.cY, gl.cZ
 
-searchRadius, useMovingGoals, smoothPath = gl.searchRadius, gl.useMovingGoals, gl.smoothPath
+searchRadius, useMovingGoals = gl.searchRadius, gl.useMovingGoals
 makeRandObs, makeFigure, makeMovie, numlevels = gl.makeRandObs, gl.makeFigure, gl.makeMovie, gl.numlevels
 
 minObs, maxObs, maxPercent, seedDyn, seedStatic = gl.minObs, gl.maxObs, gl.maxPercent, gl.seedDyn, gl.seedStatic
@@ -38,10 +38,9 @@ if makeMovie:   frames = []
 
 """ Setup abstract levels """
 L = fcn.CL(0, sizeX, sizeY, sizeZ)
-time_findL0Path = []
-time_smoothL0Path = []
+time_findPath = []
 total_cost = 0
-path = [gl.start]
+
 
 #numlevels = 0
 """ Begin main algorithm """
@@ -49,51 +48,75 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
     xNew, yNew, zNew = gl.start                         # get current location
     fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
     while gl.start != gl.goal:
-        oldstart, oldgoal = gl.start, gl.goal           # Line 48 of Moving Target D*Lite
-
 
         tic1 = time.clock()
-        pathToFollow = L.computeShortestL0Path([gl.start, gl.goal])   # get path
-        pathToFollow = fcn.postSmoothPath(pathToFollow)
-        time_findL0Path.append(time.clock()-tic1)
-        nextcoords = fcn.fromNodesToCoordinates(pathToFollow)
-        nextcoords_su = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in nextcoords]
+        path = L.computeShortestPath([gl.start, gl.goal], False)
+        path = fcn.postSmoothPath(path)
+       # path = fcn.CatmullRomSpline(path)
+        path = fcn.simulateUAVmovement(path)
 
-        # Line 53 of Moving Target D* Lite is computed within below while loop
-        # Line 54 of Moving Target D* Lite begins here
-        goalMoved, validL0Path = False, True
-        while not goalMoved and validL0Path:
-            # Save current position, then move to next point
-            xOld, yOld, zOld = xNew, yNew, zNew
-            xNew, yNew, zNew = nextcoords.pop()
-            gl.start = (round(xNew), round(yNew), round(zNew))   # update start coordinate
+        findPathTime = time.clock() - tic1  # end timer
 
-            # Plot movement and save figure
-            if makeMovie:
-                fname = ('_tmp%05d.'+gl.imgformat) %gl.stepCount
-                plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
-                frames.append(fname)
-            gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
-            total_cost += L.computeL0Cost((xOld, yOld, zOld), (xNew, yNew, zNew))
-            path.append((xNew,yNew,zNew))
+        time_findPath.append(findPathTime)  # record time
+        if gl.stepCount == 1:
+            initialFindPathTime = findPathTime
 
-            # Generate random obstacles
-            if makeRandObs:
-                fcn.genRandObs(minObs,maxObs,maxPercent,seedDyn)
 
-            # Moving goal execution
-            if useMovingGoals:
-                for i in xrange(0,len(initX)):  goalMoved = fcn.movingGoal(initX[i], initY[i], initZ[i], T[i])
 
-            gl.stepCount += 1
 
-            # Search time
-            __, validL0Path = fcn.searchAndUpdate(xNew, yNew, zNew, nextcoords_su, nextcoords_su)
+        xOrig, yOrig, zOrig = gl.start     # to identify when leaving refinement region
 
-            # If we reached the goal
-            if gl.start == gl.goal:
-                goalMoved = True
-                break
+
+
+        dfs = 0                 # distance from start, used to identify when path needs to be updated
+        goalMoved = False       # indicates whether or not the goal has moved
+        validPath = True        # indicates whether or not path being followed is still valid
+
+        while not goalMoved and validPath and gl.start != gl.goal:
+
+            # 4. Follow those points until path is invalidated or we reach end of refinement region
+            for point in path:
+
+                # Save current position, then move to next point
+                xOld, yOld, zOld = xNew, yNew, zNew
+                xNew, yNew, zNew = path.pop()
+                gl.start = (round(xNew), round(yNew), round(zNew))   # update start coordinate
+
+                # if isinf(gl.costMatrix[gl.start]):
+                #     raise Exception('Current location is in an obstacle')
+
+                # Update distance from start
+                dx, dy, dz = xOrig-xNew, yOrig-yNew, zOrig-zNew
+                dfs = math.sqrt(dx**2 + dy**2 + dz**2)
+
+
+                # Plot movement and save figure
+                if makeMovie:
+                    fname = ('_tmp%05d.'+gl.imgformat) %gl.stepCount
+                    plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
+                    frames.append(fname)
+                if gl.makeFigure:
+                    gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
+
+                # Update total cost of path
+                total_cost += L.computeCost((xOld, yOld, zOld), (xNew, yNew, zNew), False)
+
+
+                # Generate random obstacles
+                if makeRandObs:
+                    fcn.genRandObs(minObs,maxObs,maxPercent,seedDyn)
+
+                # Moving goal execution
+                if useMovingGoals:
+                    for i in xrange(0,len(initX)):  goalMoved = fcn.movingGoal(initX[i], initY[i], initZ[i], T[i])
+
+                # Update counter used for the two preceding functions
+                gl.stepCount += 1
+
+                # Check if there's any obstacles within search radius
+                if not fcn.searchAndUpdate(xNew, yNew, zNew, path):
+                    validPath=False
+                    break
 
 
 
@@ -127,11 +150,11 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 print 'Run succeeded!\n'
 
 # Get averages, in milliseconds
-mean_time_findL0Path = 1000*sum(time_findL0Path)/len(time_findL0Path)
+mean_time_findPath = 1000*sum(time_findPath)/len(time_findPath)
 
 
 def dstar_outputs():
-    return total_cost, gl.closed_L0, mean_time_findL0Path, path
+    return total_cost, gl.closed_list, mean_time_findPath, initialFindPathTime
 
 
 

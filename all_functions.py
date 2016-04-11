@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 import heapq
 import time
 from math import sqrt, ceil, floor, isinf
@@ -8,6 +8,15 @@ import collections
 import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import config_user as gl
+
+
+from sys import getsizeof, stderr
+from itertools import chain
+from collections import deque
+try:
+    from reprlib import repr
+except ImportError:
+    pass
 
 
 
@@ -25,10 +34,90 @@ restrictVerticalMovement = gl.restrictVerticalMovement
 minclustersize = gl.minclustersize
 distBetweenL0Paths = gl.distBetweenL0Paths
 distancerequirement = gl.distancerequirement
-refinementDistance = gl.refinementDistance
+refinementDistance, refinementDistanceSquared = gl.refinementDistance, gl.refinementDistance**2
+safetymargin = gl.safetymargin
+alpha, splinePoints = gl.alpha, gl.splinePoints
+pathComputationLimit = gl.t_max / 1000
 
 
 zf1, zf2 = gl.zf1, gl.zf2
+
+
+def succ6(s):
+    """ Find which nodes can be moved to next from node s, excluding diagonals"""
+    x, y, z = s
+
+    # Define successor states, one down in z-direction
+    sDel = []
+    succNode = [
+        (x,   y,   z-1),  # Keep - 8    0
+        (x,   y+1, z),    # Keep - 9    1
+        (x+1, y,   z),    # Keep - 11   2
+        (x,   y-1, z),    # Keep - 13   3
+        (x-1, y,   z),    # Keep - 15   4
+        (x,   y,   z+1),   # Keep - 25  5
+    ]
+
+    # Nodes to delete when on a boundary
+    if x == sizeX:
+        sDel.append(2)
+    elif x == 1:
+        sDel.append(4)
+
+    if y == sizeY:
+        sDel.append(1)
+    elif y == 1:
+        sDel.append(3)
+
+    if z == sizeZ:
+        sDel.append(5)
+    elif z == 1:
+        sDel.append(0)
+
+    if sDel:
+        sDel = set(sDel)
+        for i in sorted(sDel, reverse=True):
+            del succNode[i]
+
+    return succNode
+
+
+def markSafetyMargin(cellsToUpdate,sm):
+    """
+    :param cellsToUpdate: list of nodes containing obstacles
+    :param sm: safe distance to remain from obstacles
+    :return: recursively mark successors of nodes as obstacles until safety margin is met
+    """
+
+    if sm == 0:
+        return
+    else:
+        # First, get a list of the immediate successors
+        allsucc = []
+        asa = allsucc.extend
+        for node in cellsToUpdate:
+            succS = succ6(node)
+            asa(succS)
+
+        # Remove duplicates
+        allsucc = list(set(allsucc))
+
+        # Now repeat for remaining successors
+        if sm > 1:
+            for i in xrange(sm-1):
+                cellsToAdd = []
+                ce = cellsToAdd.extend
+                for node in allsucc:
+                    succS = succ6(node)
+                    ce(succS)
+
+                allsucc.extend(list(set(cellsToAdd)))
+                allsucc = list(set(allsucc))
+
+        for node in allsucc:
+            #gl.map_[node] = -1
+            gl.costMatrix[node] = float('inf')
+        del allsucc
 
 
 def succ(s):
@@ -100,7 +189,7 @@ def cantor(x,y,z):
     return x
 
 
-def rectObs(dimX, dimY, dimZ, locX, locY, locZ,):
+def rectObs(locX, locY, locZ, dimX, dimY, dimZ):
     """
     :param dimX, dimY, dimZ: specifies the dimensions of the obstacle
     :param locX, locY, locZ: defines the bottom left corner of the obstacle
@@ -246,14 +335,12 @@ def postSmoothPath(pathArray):
         """
         k, t = 0, [pathArray[0]]
 
-
         for i in xrange(1,len(pathArray)-1):
-            if not lineOfSight(t[k],pathArray[i+1]):
-                x1,y1,z1 = t[k]
-                x2,y2,z2 = pathArray[i+1]
-                if z1 == z2 or cZ == 1:
-                    k += 1
-                    t.append(pathArray[i])
+            x1,y1,z1 = t[k]
+            x2,y2,z2 = pathArray[i+1]
+            if (abs(z1-z2)>0.01 and cZ > 1) or not lineOfSight(t[k],pathArray[i+1]):
+                k += 1
+                t.append(pathArray[i])
 
         k += 1
         t.append(pathArray[-1])
@@ -312,20 +399,21 @@ def movingGoal(initX, initY, initZ, T):
     :return: 1. Moves the goal specified by input parameters; 2. boolean, whether or not goal has moved
     """
     goalMoved = False
-    if gl.stepCount % T:  # don't move every T iterations
+    if gl.stepCount % T == 0:  # move every T iterations
 
-        q = cantor(initX, initY, initZ)                 # find unique cantor id
-        if q in gl.goalsVisited:                        # break if we've visited it already
+        q = cantor(initX, initY, initZ)                                     # find unique cantor id
+        if q in gl.goalsVisited:                                            # break if we've visited it already
             return
-        idx = np.where(gl.goals[:, 4] == q)[0][0]       # get current location of goal
-        mgs_old = gl.goals[idx, 3]                      # get current node number of that goal
+        idx = np.where(gl.goals[:, 3] == q)[0][0]                           # get current location of goal
+        mgs_old = (gl.goals[idx, 0], gl.goals[idx, 1], gl.goals[idx, 2])    # get current node number of that goal
+
 
         random.seed(q+3)
-        mgs = random.choice(succ(mgs_old))              # pick random successor to move to
-        mgx, mgy, mgz = mgs                             # get coordinates of that location
-        gl.goals[idx, 0:3] = mgx, mgy, mgz              # update location of node in goals array
+        mgs = random.choice(succ(mgs_old))                                  # pick random successor to move to
+        mgx, mgy, mgz = mgs                                                 # get coordinates of that location
+        gl.goals[idx, 0:3] = mgx, mgy, mgz                                  # update location of node in goals array
 
-        if mgs_old == gl.goal:                          # if old goal was current goal, update current goal
+        if mgs_old == gl.goal:                                      # if old goal was current goal, update current goal
             gl.goal = mgs
             goalMoved = True
 
@@ -384,13 +472,13 @@ def setupLevels():
 def searchAndUpdate(xNew,yNew,zNew,*args):
     """
     :param xNew, yNew, zNew: current location of UAV
-    :param nextcoords: set of coordinates indicating where it will move next
-    :param args: arg1 checks new_waypoints_nodes, arg2 checks nextcoords_nodes
+    :param args: checks node of pathToFollow to ensure they still have line-of-sight
     :return: boolean, whether or not new obstacles exist nearby
     """
+    tic = time.clock()
     cellsToUpdate = []
     cellappend = cellsToUpdate.append
-    validCoarsePath, validL0Path = True, True
+    validPath = True
 
     # Generate list of points to search
     searchRange = []
@@ -399,67 +487,58 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     xmin, xmax = max(x-sr, 1), min(x+sr, sizeX)
     ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
     zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
-    # for dx in xrange(xmin, xmax+1):
-    #     for dy in xrange(ymin, ymax+1):
-    #         for dz in xrange(zmin, zmax+1):
-    #             sr_append((dx,dy,dz))
+
+    # Define search region
     [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
+
+
 
     # Search them
     for obsLoc in searchRange:
         if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
 
             # Mark obstacles within search radius
-            if max([abs(obsLoc[0]-xNew), abs(obsLoc[1]-yNew), abs(obsLoc[2]-zNew)]) <= searchRadius:
-                cellappend(obsLoc)
+            cellappend(obsLoc)
 
-                gl.map_[obsLoc] = - 1
-                gl.costMatrix[obsLoc] = float('inf')
+            gl.map_[obsLoc] = -1
+            gl.costMatrix[obsLoc] = float('inf')
 
-                # See if any are on current path, and if so, recalculate path
-                if args:
-                    new_waypoints_su = args[0]
-                    nextcoords_su = args[1]
-                    if obsLoc in new_waypoints_su:
-                        validCoarsePath = False
-                    if obsLoc in nextcoords_su:
-                        validL0Path = False
+    if args:
+        path1 = args[0]
+        path1 = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path1)]
 
 
-    return validCoarsePath, validL0Path
+        # Check line of sight between smoothed spline path
+        if len(path1) > 0:
+            # Extract portion within search radius
+            path_section = []
+            x1,y1,z1 = gl.start
+            x2,y2,z2 = path1[0]
+            while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= max(refinementDistance,searchRadius):
+                path_section.append(path1.pop(0))
+                if len(path1) < 1:
+                    break
+                x2,y2,z2 = path1[0]
+
+            #for each node in path_section:
+            for idx in xrange(len(path_section)-1):
+                if not lineOfSight(path_section[idx],path_section[idx+1]):
+                    validPath = False
+                    break
 
 
-def fromCoarseToWaypoints(nextpos):
-    """
-    :param nextpos: smoothed coarse path to follow
-    :return: set of coordinates to travel to between waypoints, in order to simulate UAV movemement
-    """
-    new_waypoints = []
-    for i in xrange(len(nextpos)-1):
-        prevS, nextS = nextpos[i], nextpos[i+1]
-
-        prevX, prevY, prevZ = prevS
-        nextX, nextY, nextZ = nextS
-
-        dX, dY, dZ = nextX-prevX, nextY-prevY, nextZ-prevZ
-
-        maxDist = max(abs(dist) for dist in [dX, dY, dZ])
-        numpoints =  int(round(maxDist/distBetweenL0Paths))
-        if numpoints == 0:
-            numpoints = 1
-        for jj in xrange(1, numpoints+1):
-            xFrac, yFrac, zFrac = dX/numpoints, dY/numpoints, dZ/numpoints
-            new_waypoints.append((prevX+jj*xFrac, prevY+jj*yFrac, prevZ+jj*zFrac))
-
-    return new_waypoints
+    if cellsToUpdate:
+        if safetymargin != 0:
+            markSafetyMargin(cellsToUpdate,safetymargin)
+    return validPath
 
 
-def fromNodesToCoordinates(pathToFollow):
+def simulateUAVmovement(pathToFollow):
     """
     :param pathToFollow: series of nodes for UAV to follow
     :return: list of coordinates to move to
     """
-    nextcoords = []      # Split next vertex into coordinates to travel on (for obstacle detection)
+    nextcoords = []
     for k in xrange(len(pathToFollow)-1):
         prevS, nextS = pathToFollow[k], pathToFollow[k+1]
 
@@ -470,11 +549,16 @@ def fromNodesToCoordinates(pathToFollow):
 
         maxDist = max(abs(dist) for dist in [dX, dY, dZ])
 
-        for jj in xrange(1, int(maxDist+1)):
-            xFrac, yFrac, zFrac = dX/maxDist, dY/maxDist, dZ/maxDist
-            nextcoords.append((prevX + jj*xFrac, prevY + jj*yFrac, prevZ + jj*zFrac))
+        if maxDist <=1:
+            nextcoords.append((nextX, nextY, nextZ))
+        else:
+            for jj in xrange(1, int(maxDist+1)):
+                xFrac, yFrac, zFrac = dX/maxDist, dY/maxDist, dZ/maxDist
+                newX, newY, newZ = prevX + jj*xFrac, prevY + jj*yFrac, prevZ + jj*zFrac
+                nextcoords.append((newX, newY, newZ))
 
-    # Next node to go to is last node in array (easier to splice in new paths this way)
+
+    # Next node to go to is last node in array
     nextcoords.reverse()
     return nextcoords
 
@@ -492,59 +576,186 @@ def euclideanDistance(us,ut):
     return sqrt(dx*dx + dy*dy + dz*dz)
 
 
-def findCoarsePath(L):
-    distance = euclideanDistance(gl.start,gl.goal)
-    new_waypoints = [gl.start, gl.goal]
+def initial_memory():
+    # Test memory usage?
+    pass
 
-    for level in xrange(gl.numlevels,-1,-1):        # for all levels
-        if distance > distancerequirement*L[level].maxlength:     # only for big enough distances
+
+def findPath(L):
+    startTime = time.clock()
+    distance = euclideanDistance(gl.start,gl.goal)
+    path = [gl.start, gl.goal]
+    first_path = True
+
+    if distance <= distancerequirement*4: # path distance too short
+        path = L[0].computeShortestPath(path,False)
+        return path
+
+    # Get most coarse path first
+    for level in xrange(gl.numlevels,-1,-1):                        # for each level
+        if distance >= distancerequirement*L[level].maxlength:       # only for big enough distances
             try:
-                new_waypoints = L[level].computeShortestCoarsePath(new_waypoints)
-                #new_waypoints = L[level].computeShortestPathWithWaypoints(new_waypoints)
+            #    L[level].initialize_first(gl.start, gl.goal)
+                path = L[level].computeShortestPath(path,first_path)
+                #plotResultingWaypoints(path, 'b', 10)
+                first_path = False
+
                 break
-            except KeyError:    # if there's no path at that level, go a level smaller
+            except (KeyError, IndexError):    # if there's no path at that level, go a level smaller
                 continue
 
-    if level != 1:
-        refined_waypoints = list(new_waypoints)
-        for idx,waypoint in enumerate(new_waypoints):
-            if euclideanDistance(gl.start,waypoint) <= refinementDistance:
-                new_waypoints.pop(0)
+
+
+    if level != 0 and time.clock()-startTime < pathComputationLimit:
+        refined_path = []
+        #while euclideanDistance(gl.start,path[0]) <= refinementDistance:
+        x1,y1,z1 = gl.start
+        x2,y2,z2 = path[0]
+        #while (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 <= refinementDistanceSquared:
+        while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= refinementDistance:
+            refined_path.append(path.pop(0))
+            if len(path) == 1:
+                    break
+            x2,y2,z2 = path[0]
+
+        refined_path.append(path.pop(0))   # "path" now only contains nodes outside of the search radius
+
+
+        for newlevel in xrange(level-1,-1,-1):
+            if time.clock()-startTime < pathComputationLimit:
+                refined_path = L[newlevel].computeShortestPath(refined_path, first_path)
+                #plotResultingWaypoints(refined_path, 'b', 10)
             else:
-                new_waypoints.pop(0)
-                final_point = waypoint
-                refined_waypoints = refined_waypoints[0:idx+1]
                 break
 
-        for newlevel in xrange(level-1,0,-1):
-            refined_waypoints = L[newlevel].computeRefinedCoarsePath(refined_waypoints)
+        path[:0] = refined_path                     # insert refined path into the beginning of the original path
 
-        new_waypoints[:0] = refined_waypoints
-    return new_waypoints
+    else:
+        return path
 
 
-def plotResultingWaypoints(waypoints,color,size):
+
+    return path
+
+
+def compute_t(ti, p1, p2):
+    """
+    used to get parametric value t for Catmull-Rom spline
+    """
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+    return (((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2 )**0.5)**alpha + ti
+
+
+def CatmullRomPoints(p0, p1, p2, p3, numPts):
+    """
+    :param p0, p1, p2, p3:  (x,y,z) coordinates
+    :param numPts:  number of points to include in this curve segment.
+    :return: [p1, generated intermediary points, p2]
+    """
+
+    # Convert the points to numpy so that we can do array multiplication
+    p0, p1, p2, p3 = map(np.array, [p0, p1, p2, p3])
+
+    # Calculate t0 to t3
+    t0 = 0
+    t1 = compute_t(t0, p0, p1)
+    t2 = compute_t(t1, p1, p2)
+    t3 = compute_t(t2, p2, p3)
+
+    if t1==t0:
+        t1 = 1e-8
+
+    if t3==t2:
+        t3 = t2+1e-8
+
+    # Only find points between p1 and p2
+    t = np.linspace(t1, t2, numPts)
+
+    # Get point for each t-value using equation in: http://faculty.cs.tamu.edu/schaefer/research/catmull_rom.pdf
+    t = t.reshape(len(t),1)
+
+    L01 = (t1-t)/(t1-t0) * p0 + (t - t0) / (t1 - t0) * p1
+    L12 = (t2-t)/(t2-t1) * p1 + (t - t1) / (t2 - t1) * p2
+    L23 = (t3-t)/(t3-t2) * p2 + (t - t2) / (t3 - t2) * p3
+
+    L012 = (t2-t)/(t2-t0)*L01 + (t-t0)/(t2-t0)*L12
+    L123 = (t3-t)/(t3-t1)*L12 + (t-t1)/(t3-t1)*L23
+
+    C  = (t2-t)/(t2-t1)*L012 + (t-t1)/(t2-t1)*L123
+    return C
+
+
+def CatmullRomSpline(pts):
+    """
+    Generate Catmull-Rom spline for a chain of points and return the combined curve.
+    """
+
+    if len(pts) > 2:
+        # Duplicate first and last nodes to get their splines
+        pts.insert(0, pts[0])
+        pts.append(pts[-1])
+
+        sz = len(pts)
+
+        # Create list of (x,y,z) coordinates
+        C = []
+
+        for i in range(sz-3):
+            c = CatmullRomPoints(pts[i], pts[i+1], pts[i+2], pts[i+3], splinePoints)
+            C.extend(c.tolist())
+
+        # Remove duplicate nodes
+        # rowDel = []
+        # for idx in xrange(len(C)-1):
+        #     x1,y1,z1 = C[idx]
+        #     x2,y2,z2 = C[idx+1]
+        #     if (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 <= 1:
+        #         rowDel.append(idx+1)
+        #
+        # for i in sorted(rowDel, reverse=True):
+        #     del C[i]
+
+
+        k, t = 0, [C[0]]
+        for i in xrange(1,len(C)-1):
+            x1,y1,z1 = t[k]
+            x2,y2,z2 = C[i+1]
+        #    if (abs(z1-z2)>0.01 and cZ > 1) or not lineOfSight(t[k],pathArray[i+1]):
+            if (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 >= 1:
+                k += 1
+                t.append(C[i])
+
+        k += 1
+        t.append(C[-1])
+
+        return t
+
+
+
+    else:
+        # Cannot generate spline through two nodes
+        return pts
+
+
+def plotResultingWaypoints(waypoints,color,size,delete):
     """
     Useful for debugging, plots coarse waypoints for current coarse path, then removes them and shows the new ones
     for subsequent coarse paths
     :param waypoints: vector of coarse nodes
     :return: updates plot with scatter points of each waypoint
     """
-    X,Y,Z = [], [], []
-    if gl.stepCount > 1:
-        gl.hdl.remove()
-    for node in waypoints:
-        x,y,z = node
-        X.append(x), Y.append(y), Z.append(z)
-    gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
+    if makeFigure:
+        X,Y,Z = [], [], []
+        if gl.stepCount > 1 and delete==True:
+            gl.hdl.remove()
+        for node in waypoints:
+            x,y,z = node
+            X.append(x), Y.append(y), Z.append(z)
 
+        X.pop(0), Y.pop(0), Z.pop(0)        # don't plot start node
+        gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
 
-def updateTotalCost(us,ut):
-    """
-    :param us: source node
-    :param ut: target node
-    :return: additional cost added by traveling between those two nodes
-    """
 
 
 """ Creating classes """
@@ -568,29 +779,24 @@ class CL:   # Create level
         self.minlength = min(self.lengthX, self.lengthY, self.lengthZ)
         self.numNodes = self.sizeX*self.sizeY*self.sizeZ
 
-        self.E = []
-        self.appE = self.E.append
-        self.S = {gl.start:[], gl.goal:[]}
-        # self.clusterStart = (gl.start)
-        # self.clusterGoal  = (gl.goal)
 
-
-    def initialize(self,startnode,goalnode):
+    def initialize(self, startnode, goalnode):
         """
         :param startnode: start location
         :param goalnode: goal location
         :return: resets class variables to perform computeShortestPath
         """
+
         CL.U = []
+        CL.entry_finder = {}      # mapping of tasks to entries
         CL.km = 0
         CL.g = collections.defaultdict(lambda: float('inf'))
         CL.rhs = collections.defaultdict(lambda: float('inf'))
         CL.bptr = collections.defaultdict(None)
 
-        CL.entry_finder = {}      # mapping of tasks to entries
         CL.g[goalnode] = float('inf')
         CL.rhs[goalnode] = 0
-        CL.bptr[goalnode] = None
+
 
         self.add_node(heuristic(startnode, goalnode), 0, goalnode)    # add goal to queue
 
@@ -639,99 +845,49 @@ class CL:   # Create level
                 self.remove_node(u)
 
 
-    """
-    Hierarchical Functions
-    """
-
-    def computeCoarseCost(self, us, ut):
-        """
-        :param xs,ys,zs: source node, us, coordinates
-        :param ut: target node number
-        :return: cost of moving from us to ut for abstract levels
-        """
-
-        # Check line of sight if closest node is within search radius of current location
-
-
-        # We search from goal to start
-        dx1, dy1, dz1 = gl.start[0]-us[0], gl.start[1]-us[1], gl.start[2]-us[2]
-        dx2, dy2, dz2 = gl.start[0]-ut[0], gl.start[1]-ut[1], gl.start[2]-ut[2]
-
-        if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
-            return float('inf')
-        elif restrictVerticalMovement:
-            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
-                return float('inf')
-        elif dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
-            if not lineOfSight(us,ut):
-                return float('inf')
-
-        dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
-        if us[2] != ut[2]:
-            sf = cZ     # scale factor
-        else:
-            sf = max(cX, cY)
-
-        return sf * sqrt(dx*dx + dy*dy + dz*dz)
-
-
-    def computeRefinedCost(self, us, ut):
-        """
-        :param xs,ys,zs: source node, us, coordinates
-        :param ut: target node number
-        :return: cost of moving from us to ut for abstract levels, disregarding line of sight
-        """
-
-        if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
-            return float('inf')
-        elif restrictVerticalMovement:
-            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
-                return float('inf')
-
-        dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
-        if us[2] != ut[2]:
-            sf = cZ     # scale factor
-        else:
-            sf = max(cX, cY)
-
-        return sf * sqrt(dx*dx + dy*dy + dz*dz)
-
-
-    def computeL0Cost(self, us, ut):
+    def computeCost(self, us, ut, first_path):
         """
         :param us: source node
         :param ut: target node
         :return: cost of moving from us to ut for level 0
         """
 
-
-        if isinf(gl.costMatrix[ut]):#  or isinf(gl.costMatrix[us]):
+        if isinf(gl.costMatrix[ut]):
             return float('inf')
-        elif restrictVerticalMovement:
-            if abs(us[2]-ut[2])==1 and us[0] == ut[0] and us[1] == ut[1]:
-                return float('inf')
 
-        # if us[2] == 1 or ut[2] == 1 or us[2] == 0 or ut[2] == 0:
-        #     return float('inf')
+        if first_path:
+            # Check line of sight if closest node is within search radius of current location
+            dx1, dy1, dz1 = gl.start[0]-us[0], gl.start[1]-us[1], gl.start[2]-us[2]
+            dx2, dy2, dz2 = gl.start[0]-ut[0], gl.start[1]-ut[1], gl.start[2]-ut[2]
+
+            if max([abs(dx1),abs(dy1),abs(dz1)]) <= searchRadius or max([abs(dx2),abs(dy2),abs(dz2)]) <= searchRadius:
+            #if dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
+                if not lineOfSight(us,ut):
+                    return float('inf')
 
         dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
 
-        if us[2] != ut[2]:
+        if dz != 0:
             sf = cZ     # scale factor
         else:
-            sf = max(cX, cY)
+            sf = 1
 
         return sf * sqrt(dx*dx + dy*dy + dz*dz)
 
 
-    def coarse_succ(self,s,startnode):
-        """ Find which nodes can be moved to next from node s"""
-        x, y, z = s #S[s]
+    def succ(self, s, startnode):
+        """
+        :param s: node to find successors for
+        :param startnode: current location of agent
+        :return: list of successors nodes
+        """
+
+        x, y, z = s
 
         # Define successor states, one down in z-direction
         sDel = []
         succNode = [
-            (x+self.lengthX, y+self.lengthY, (z-self.lengthZ)*zf1 + zf2),
+            (x,              y+self.lengthY, (z-self.lengthZ)*zf1 + zf2),
             (x+self.lengthX, y+self.lengthY, (z-self.lengthZ)*zf1 + zf2),
             (x+self.lengthX, y,              (z-self.lengthZ)*zf1 + zf2),
             (x+self.lengthX, y-self.lengthY, (z-self.lengthZ)*zf1 + zf2),
@@ -756,9 +912,12 @@ class CL:   # Create level
             (x-self.lengthX, y-self.lengthY, (z+self.lengthZ)*zf1 + zf2),
             (x-self.lengthX, y,              (z+self.lengthZ)*zf1 + zf2),
             (x-self.lengthX, y+self.lengthY, (z+self.lengthZ)*zf1 + zf2),
-            (x,              y,              (z+self.lengthZ)*zf1 + zf2),
+            (x,              y,              (z+self.lengthZ)*zf1 + zf2)
             ]
 
+
+        if restrictVerticalMovement:
+            sDel += 8, 25
 
         # Nodes to delete when on a boundary
         if x > sizeX - self.lengthX:
@@ -784,164 +943,33 @@ class CL:   # Create level
         # check if start node is a successor
         startx, starty, startz = startnode
         dx, dy, dz = abs(x-startx), abs(y-starty), abs(z-startz)
-        if max(dx,dy,dz) <= self.maxlength:
+        if max(dx,dy,dz) < 2*self.maxlength:
+
             succNode.append(startnode)
 
         return succNode  # [sn for sn in succNode if sn > 0]
 
 
-    def computeShortestCoarsePath(self,waypoints):
-        """
-        :param waypoints: list of points to computeShortestPath for
-        (i.e. from waypoint[0] to waypoint [1], from waypoint[1] to waypoint[2],..., from waypoint[n-1] to waypoint[n]
-        :return: new set of waypoints for the refinement planner
-        """
-
-        new_waypoints, startnode, goalnode = [], [], []
-        numloscalls = 0
-        for idx, node in enumerate(waypoints[0:-1]):
-            startnode, goalnode = node, waypoints[idx+1]
-            self.initialize(startnode,goalnode)
-
-            kOld1, kOld2, u = self.pop_node()
-            k1, k2 = self.calcKey(startnode, startnode)
-            gl.closed_coarse += 1
-
-            while kOld1 < k1 or (kOld1 == k1 and kOld2 < k2) or CL.rhs[startnode] > CL.g[startnode]:
-
-                kNew1,kNew2 = self.calcKey(u, startnode)
-                if kOld1 < kNew1 or (kOld1 == kNew1 and kOld2 < kNew2):
-                    self.add_node(kNew1, kNew2, u)
-
-                elif CL.g[u] > CL.rhs[u]:
-                    CL.g[u] = CL.rhs[u]
-                    succU = self.coarse_succ(u,startnode)
-
-                    for s in succU:
-                        theCost = self.computeCoarseCost(u, s)
-                        if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
-                            numloscalls += 1
-                            CL.bptr[s] = u
-                            CL.rhs[s] = CL.g[u] + theCost
-                            self.updateVertex(s, startnode)
-                else:
-                    CL.g[u] = float('inf')
-                    succU = self.coarse_succ(u,startnode)
-                    for s in succU:
-                        if s != goalnode and CL.bptr[s] == u:
-                            succS = self.coarse_succ(s,startnode)
-
-                            minArray = {}
-                            for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.computeCoarseCost(s, sp) #self.getCoarseCost(sp, s)
-
-                            # Find min by comparing second element of each tuple
-                            CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
-
-                            if isinf(CL.rhs[s]):
-                                CL.bptr[s] = float('NaN')
-
-                        self.updateVertex(s, startnode)
-
-                kOld1, kOld2, u = self.pop_node()
-                k1, k2 = self.calcKey(startnode, startnode)
-                gl.closed_coarse += 1
-
-            nextpos = [startnode]
-            while nextpos[-1] != goalnode:
-                nextpos.append(CL.bptr[nextpos[-1]])
-
-            new_waypoints.extend(nextpos[0:-1])
-        new_waypoints.append(goalnode)
-        return new_waypoints
-
-
-    def computeRefinedCoarsePath(self,waypoints):
-        """
-        :param waypoints: list of points to computeShortestPath for
-        (i.e. from waypoint[0] to waypoint [1], from waypoint[1] to waypoint[2],..., from waypoint[n-1] to waypoint[n]
-        :return: new set of waypoints for a lower level planner
-        """
-
-        new_waypoints, startnode, goalnode = [], [], []
-        numloscalls = 0
-        for idx, node in enumerate(waypoints[0:-1]):
-            startnode, goalnode = node, waypoints[idx+1]
-            self.initialize(startnode,goalnode)
-
-            kOld1, kOld2, u = self.pop_node()
-            k1, k2 = self.calcKey(startnode, startnode)
-            gl.closed_refined += 1
-
-            while kOld1 < k1 or (kOld1 == k1 and kOld2 < k2) or CL.rhs[startnode] > CL.g[startnode]:
-
-                kNew1,kNew2 = self.calcKey(u, startnode)
-                if kOld1 < kNew1 or (kOld1 == kNew1 and kOld2 < kNew2):
-                    self.add_node(kNew1, kNew2, u)
-
-                elif CL.g[u] > CL.rhs[u]:
-                    CL.g[u] = CL.rhs[u]
-                    succU = self.coarse_succ(u,startnode)
-
-                    for s in succU:
-                        theCost = self.computeRefinedCost(u, s)
-                        if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
-                            numloscalls += 1
-                            CL.bptr[s] = u
-                            CL.rhs[s] = CL.g[u] + theCost
-                            self.updateVertex(s, startnode)
-                else:
-                    CL.g[u] = float('inf')
-                    succU = self.coarse_succ(u,startnode)
-                    for s in succU:
-                        if s != goalnode and CL.bptr[s] == u:
-                            succS = self.coarse_succ(s,startnode)
-
-                            minArray = {}
-                            for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.computeRefinedCost(s, sp) #self.getCoarseCost(sp, s)
-
-                            # Find min by comparing second element of each tuple
-                            CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
-
-                            if isinf(CL.rhs[s]):
-                                CL.bptr[s] = float('NaN')
-
-                        self.updateVertex(s, startnode)
-
-                kOld1, kOld2, u = self.pop_node()
-                k1, k2 = self.calcKey(startnode, startnode)
-                gl.closed_refined += 1
-
-            # Get the backpointers
-            # nextpos = np.array([startnode])
-            # while nextpos[-1] != goalnode:
-            #     nextpos = np.append(nextpos, CL.bptr[nextpos[-1]])
-            nextpos = [startnode]
-            while nextpos[-1] != goalnode:
-                nextpos.append(CL.bptr[nextpos[-1]])
-
-            new_waypoints.extend(nextpos[0:-1])
-        new_waypoints.append(goalnode)
-        return new_waypoints
-
-
-    def computeShortestL0Path(self, waypoints):
+    def computeShortestPath(self, waypoints, first_path):
         """
         Only use for level 0 map. The only difference is the successor function
-        :param waypoints: list of points to computeShortestPath to, in that order
-        :return: set of waypoints to smooth and then travel on
+        :param waypoints: list of points to computeShortestPath for
+        (i.e. from waypoint[0] to waypoint [1], from waypoint[1] to waypoint[2],..., from waypoint[n-1] to waypoint[n])
+        :return: new set of waypoints to either send to lower level planner, or to smooth and follow
         """
 
+        tic = time.clock()
         new_waypoints, startnode, goalnode = [], [], []
         for idx, node in enumerate(waypoints[0:-1]):
             startnode, goalnode = node, waypoints[idx+1]
-            self.initialize(startnode,goalnode)
+            if isinf(gl.costMatrix[startnode]):
+                raise Exception('In an obstacle')
+            self.initialize(startnode, goalnode)
 
 
             kOld1, kOld2, u = self.pop_node()
             k1, k2 = self.calcKey(startnode, startnode)
-            gl.closed_L0 += 1
+            gl.closed_list += 1
 
             while kOld1 < k1 or (kOld1 == k1 and kOld2 < k2) or CL.rhs[startnode] > CL.g[startnode]:
 
@@ -952,24 +980,24 @@ class CL:   # Create level
 
                 elif CL.g[u] > CL.rhs[u]:
                     CL.g[u] = CL.rhs[u]
-                    succU = succ(u)
+                    succU = self.succ(u, startnode)
 
                     for s in succU:
-                        theCost = self.computeL0Cost(u, s)
+                        theCost = self.computeCost(u, s, first_path)
                         if s != goalnode and CL.rhs[s] > CL.g[u] + theCost:
                             CL.bptr[s] = u
                             CL.rhs[s] = CL.g[u] + theCost
                             self.updateVertex(s, startnode)
                 else:
                     CL.g[u] = float('inf')
-                    succU = succ(u)
+                    succU = self.succ(u, startnode)
                     for s in succU:
                         if s != goalnode and CL.bptr[s] == u:
-                            succS = succ(s)
+                            succS = self.succ(s, startnode)
 
                             minArray = {}
                             for sp in succS:
-                                minArray[sp] = CL.g[sp] + self.computeL0Cost(sp, s)
+                                minArray[sp] = CL.g[sp] + self.computeCost(sp, s, first_path)
 
                             # Find min by comparing second element of each tuple
                             CL.bptr[s], CL.rhs[s] = min(minArray.items(), key=lambda x:x[1])
@@ -981,7 +1009,8 @@ class CL:   # Create level
 
                 kOld1, kOld2, u = self.pop_node()
                 k1, k2 = self.calcKey(startnode, startnode)
-                gl.closed_L0 += 1
+                gl.closed_list += 1
+
 
             nextpos = [startnode]
             while nextpos[-1] != goalnode:
@@ -989,4 +1018,48 @@ class CL:   # Create level
             new_waypoints.extend(nextpos[0:-1])
         new_waypoints.append(goalnode)
 
+        if isinf(gl.costMatrix[CL.rhs[startnode]]):
+            raise Exception('No path exists')
+
         return new_waypoints
+
+
+def total_size(o, handlers={}, verbose=False):
+    """ Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {tuple: iter,
+                    list: iter,
+                    deque: iter,
+                    dict: dict_handler,
+                    set: iter,
+                    frozenset: iter,
+                   }
+    all_handlers.update(handlers)     # user handlers take precedence
+    seen = set()                      # track which object id's have already been seen
+    default_size = getsizeof(0)       # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:       # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)

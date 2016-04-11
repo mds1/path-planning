@@ -14,10 +14,6 @@ rXstart, rYstart, rZstart, rXdim, rYdim, rZdim = gl.rXstart, gl.rYstart, gl.rZst
 
 
 
-# Check user inputs
-fcn.clusterDimCheck()
-
-
 # Add moving goals to goals array
 if gl.initX:
     newgoals = np.zeros((len(gl.initX), 4))
@@ -59,8 +55,8 @@ gl.goal = (gl.goals[goalindex,0], gl.goals[goalindex,1], gl.goals[goalindex,2])
 np.random.seed(gl.seedStatic)
 randomint = np.random.random_integers
 obs_append = gl.obstacles.append
-for i in xrange(0, gl.num2gen):
-    newXFixed, newYFixed, newZFixed = randomint(1, sizeX), randomint(1, sizeY), randomint(1, sizeZ)
+for i in xrange(0, int(math.ceil(gl.num2gen/125))):
+    newXFixed, newYFixed, newZFixed = randomint(1, sizeX-6), randomint(1, sizeY-6), randomint(1, sizeZ-6)
 
     obsnode = (newXFixed, newYFixed, newZFixed)
     # Don't place obstacle at start, goal, other obstacles, or within searchRadius
@@ -70,15 +66,18 @@ for i in xrange(0, gl.num2gen):
         continue
 
     curX, curY, curZ = gl.start
-    if max([abs(curX - newXFixed),abs(curY - newYFixed),abs(curZ - newZFixed)]) < gl.searchRadius:
+    if max([abs(curX - newXFixed),abs(curY - newYFixed),abs(curZ - newZFixed)]) < 6:
         continue
-    newObsArray = (newXFixed, newYFixed, newZFixed)
 
-    obs_append(newObsArray)
-    # if len(gl.obstacles) > 0:
-    #     gl.obstacles = np.vstack((gl.obstacles, newObsArray))
-    # else:
-    #     gl.obstacles = np.array(newObsArray)
+    curX, curY, curZ = gl.goal
+    if max([abs(curX - newXFixed),abs(curY - newYFixed),abs(curZ - newZFixed)]) < 6:
+        continue
+
+    rLoc = fcn.rectObs(newXFixed, newYFixed, newZFixed, 5,5,5)
+    #newObsArray = (newXFixed, newYFixed, newZFixed)
+
+    #obs_append(newObsArray)
+    gl.obstacles.extend(rLoc)
 
 """
 
@@ -116,13 +115,11 @@ for i in xrange(0,len(rXstart)):
     if gl.makeFigure:
         fcn.plotRectObs(rXstart[i], rYstart[i], rZstart[i], rXdim[i], rYdim[i], rZdim[i], 0.2, gl.ax1)
 
-    rLoc = fcn.rectObs(rXdim[i], rYdim[i], rZdim[i], rXstart[i], rYstart[i], rZstart[i])
+    rLoc = fcn.rectObs(rXstart[i], rYstart[i], rZstart[i], rXdim[i], rYdim[i], rZdim[i])
 
     gl.obstacles.extend(rLoc)
-    # if len(gl.obstacles) > 0:
-    #     gl.obstacles = np.vstack((gl.obstacles, rLoc))
-    # else:
-    #     gl.obstacles = np.array(rLoc)
+
+
 gl.number_of_obstacles = len(gl.obstacles)
 
 
@@ -134,10 +131,7 @@ for obsLoc in gl.obstacles:
     elif not gl.startWithEmptyMap:
         gl.map_[obsLoc] = -1                     # mark as known obstacle
         gl.costMatrix[obsLoc] = float('inf')
-        for obsSucc in fcn.succ(obsLoc):
-            gl.map_[obsLoc] = -1                     # mark as known obstacle
-            gl.costMatrix[obsLoc] = float('inf')
-
+        fcn.markSafetyMargin(obsLoc,gl.safetymargin)
 
     else:
         raise ValueError('\'startWithEmptymap\' must be equal to True or False')
@@ -148,10 +142,22 @@ xMin, xMax = 0.5, sizeX+0.5
 yMin, yMax = 0.5, sizeY+0.5
 zMin, zMax = 0.5, sizeZ+0.5
 if gl.makeFigure:
-    gl.ax1.set_xlabel('x'), gl.ax1.set_ylabel('y'), gl.ax1.set_zlabel('z')
+  #  gl.ax1.set_xlabel('x'), gl.ax1.set_ylabel('y'), gl.ax1.set_zlabel('z')
     gl.ax1.set_xlim(xMin, xMax), gl.ax1.set_ylim(yMin, yMax), gl.ax1.set_zlim(zMin, zMax)
     gl.ax1.view_init(elev=44., azim= -168)
+
     gl.ax1.locator_params(axis='z',nbins=6)
+
+    """ Settings for creating path-finding process walk-through """
+    gl.ax1.view_init(elev=89., azim= 180)
+
+    # Turn off z-axis
+    gl.ax1.w_zaxis.line.set_lw(0.)
+    gl.ax1.set_zticks([])
+
+    # Label start and goal nodes
+    gl.ax1.text(1,1,1,'Start',zdir='y')
+  #  gl.ax1.text(128,128,1,'Goal',zdir='y')
 
     """
     Scaling for plot is done from here...
@@ -169,7 +175,7 @@ if gl.makeFigure:
 
     gl.ax1.get_proj=modified_proj
     """
-    to here
+    ...to here
     """
 
 # Determine number of levels

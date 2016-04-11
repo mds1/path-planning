@@ -7,12 +7,18 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
 
+
 testingMode = False
 
 # Visual Settings
 makeFigure = True
 makeMovie = False
-watchPlot = False
+startWithEmptyMap = True
+makeRandObs = False
+useMovingGoals = False
+restrictVerticalMovement = True
+
+
 
 
 vidname = 'dstarVid'
@@ -20,48 +26,47 @@ fps = 5            # higher = faster playback speed
 dpi = 100           # higher = better quality, slower runtime (300
 imgformat = 'png'   # currently only works for png
 
-# Cluster Settings
-minclustersize = 4      # min dimension of a cluster is this many L0 nodes (4 recommended for shorter paths)
-
 
 # Global Cost Scale Factors / Other Settings
+alpha = 0.5
+splinePoints = 5        # Enter 2 to not use splines, otherwise 5 is recommended
+t_max = float('inf')             # Max time to spend on path-finding, in milliseconds. Enter high value to prevent restriction
+
 mapscale = 4
 percentFixedRandomObstacles = 0
 safetymargin = 0
-searchRadius = 20
-cX, cY, cZ = 1, 1, 1
+cX, cY, cZ = 1, 1, 2
 heuristicScale = 1.01
+
+searchRadius = 20
+refinementDistance = math.ceil(searchRadius * 2)
+
 zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
                                 # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
-distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
-                                # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
-distancerequirement = 7    # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
+distancerequirement = 7     # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
                                 # distance >= distancerequirement*maxclusterdimension
                                 # too small and it runs for very long and may not find a path, >=6 recommended
-refinementDistance = searchRadius
 
-startWithEmptyMap = True
-smoothPath = False
-makeRandObs = False
-useMovingGoals = False
-restrictVerticalMovement = False
+
+
 
 
 
 # Map Settings
 sizeX = 64 * mapscale
 sizeY = 64 * mapscale
-sizeZ = 32 * mapscale
+sizeZ = 64 * mapscale
 start = (3*mapscale , 4*mapscale, 6*mapscale)
-goals = np.array([[62., 60., 6., 0.]])  * mapscale
-#goals = np.array([[15., 8., 10.,    0., 0.], [23., 23., 19.,    0., 0.]])  * mapscale
+#start = (5*mapscale , 5*mapscale, sizeZ/2*mapscale)
+#goals = np.array([[sizeX-5., sizeY-5., sizeZ/2., 0.]])  * mapscale
+goals = np.array([[62., 60., 6.,    0.]])  * mapscale
 # 0 placeholders are for cantor function
 
-# Generate Moving Goals
-initX = []# [12, 6]
-initY = []#[3, 2]
-initZ = []#[4, 7]
-T = []#[5, 2]
+# Configure Moving Goals
+initX = [60, 60]# [12, 6]
+initY = [50, 49]#[3, 2]
+initZ = [6, 6]#[4, 7]
+T = [5, 5]#[5, 2]
 
 
 
@@ -86,17 +91,22 @@ rZdim =   [30,  8, 15, 28, 20, 28]
 
 
 # Generate Random Dynamic Obstacles
+randomint = np.random.random_integers
+
 minObs = 5
 maxObs = 50
 maxPercent = 0.05
 seedDyn = np.random.randint(0,1000)
-#seedDyn = 432
+#seedDyn = np.random.randint(0,10)
+seedDyn = 432
+
 
 # Generate Random Fixed Obstacles
 num2gen = int(round(percentFixedRandomObstacles/100 * sizeX*sizeY*sizeZ))
 seedStatic = np.random.random_integers(0,1000)
-#seedStatic = 141
-np.random.seed(seedStatic)
+#seedStatic = np.random.random_integers(0,10
+seedStatic = 141
+
 
 
 
@@ -114,7 +124,7 @@ initZ = [mapscale*point for point in initZ]
 
 rXstart = [mapscale*(point) for point in rXstart if point >= 1]
 rYstart = [mapscale*(point) for point in rYstart if point >= 1]
-rZstart = [mapscale*(point) for point in rZstart if point >= 1]
+rZstart = [point for point in rZstart if point >= 1]
 rXdim = [mapscale*(point) for point in rXdim if point <= sizeX]
 rYdim = [mapscale*(point) for point in rYdim if point <= sizeY]
 rZdim = [mapscale*(point) for point in rZdim if point <= sizeZ]
@@ -126,6 +136,12 @@ if testingMode:
 
 if makeMovie:
     makeFigure = True
+
+if not useMovingGoals:
+    initX = []
+    initY = []
+    initZ = []
+    T = []
 
 
 
@@ -149,7 +165,12 @@ if makeFigure:
 
 # Used to save some variables
 hdl = []
-closed_coarse = 0
-closed_refined = 0
-closed_L0 = 0
+closed_list = 0
 output = {}
+
+
+
+# Deprecated variables
+distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
+                                # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
+minclustersize = 4  # (still used) dimension of a cluster is this many L0 nodes (4 recommended for shorter paths)
