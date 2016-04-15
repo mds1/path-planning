@@ -20,7 +20,7 @@ except ImportError:
 
 
 
-# Creating local copies of unchanging variables
+# Creating local copies of constants
 sizeX, sizeY, sizeZ = gl.sizeX, gl.sizeY, gl.sizeZ
 cX, cY, cZ, zMove = gl.cX, gl.cY, gl.cZ, sizeX*sizeY*sizeZ
 
@@ -35,10 +35,579 @@ distancerequirement = gl.distancerequirement
 refinementDistance, refinementDistanceSquared = gl.refinementDistance, gl.refinementDistance**2
 safetymargin = gl.safetymargin
 alpha, splinePoints = gl.alpha, gl.splinePoints
-pathComputationLimit = gl.t_max / 1000
-
-
+pathComputationLimit = gl.t_max / 1000          # convert to seconds
 zf1, zf2 = gl.zf1, gl.zf2
+
+
+
+
+def succ(s):
+    """ Find which nodes can be moved to next from node s. Used to randomly move any moving goals """
+    x, y, z = s
+
+    # Define successor states
+    sDel = []
+    succNode = [
+        (x,   y+1, z-1),
+        (x+1, y+1, z-1),
+        (x+1, y,   z-1),
+        (x+1, y-1, z-1),
+        (x,   y-1, z-1),
+        (x-1, y-1, z-1),
+        (x-1, y,   z-1),
+        (x-1, y+1, z-1),
+        (x,   y,   z-1),
+        (x,   y+1, z),
+        (x+1, y+1, z),
+        (x+1, y,   z),
+        (x+1, y-1, z),
+        (x,   y-1, z),
+        (x-1, y-1, z),
+        (x-1, y,   z),
+        (x-1, y+1, z),
+        (x,   y+1, z+1),
+        (x+1, y+1, z+1),
+        (x+1, y,   z+1),
+        (x+1, y-1, z+1),
+        (x,   y-1, z+1),
+        (x-1, y-1, z+1),
+        (x-1, y,   z+1),
+        (x-1, y+1, z+1),
+        (x,   y,   z+1),
+    ]
+
+    # Nodes to delete when on a boundary
+    if x == sizeX:
+        sDel += 1,2,3,10,11,12,18,19,20
+    elif x == 1:
+        sDel +=5,6,7,14,15,16,22,23,24
+
+    if y == sizeY:
+        sDel += 0,1,7,9,10,16,17,18,24
+    elif y == 1:
+        sDel += 3,4,5,12,13,14,20,21,22
+
+    if z == sizeZ:
+        sDel += 17,18,19,20,21,22,23,24,25
+    elif z == 1:
+        sDel += 0,1,2,3,4,5,6,7,8
+
+    if sDel:
+        sDel = set(sDel)
+        for i in sorted(sDel, reverse=True):
+            del succNode[i]
+
+    return succNode
+
+
+def cantor(x,y,z):
+    """
+    :param x, y, z: node coordinates
+    :return: single unique integer of the 3 coordinates using cantor pairing function
+    """
+    x = 0.5 * (x + y) * (x + y + 1) + y
+    x = 0.5 * (x + z) * (x + z + 1) + z
+    return x
+
+
+def rectObs(locX, locY, locZ, dimX, dimY, dimZ):
+    """
+    Generate rectangular obstacles
+    :param dimX, dimY, dimZ: specifies the dimensions of the obstacle
+    :param locX, locY, locZ: defines the bottom left corner of the obstacle
+    :return: array of the individual nodes which compose the larger cuboid
+    """
+    obsLocX, obsLocY, obsLocZ = [],[],[]
+    appX, appY, appZ = obsLocX.append, obsLocY.append, obsLocZ.append
+    obsLocs = []
+    obs_append = obsLocs.append
+    for dx in xrange(0, dimX):
+        for dy in xrange(0, dimY):
+            for dz in xrange(0, dimZ):
+                appX(locX + dx), appY(locY + dy), appZ(locZ + dz)
+                obs_append((locX + dx, locY + dy, locZ + dz))
+
+    return obsLocs
+
+
+def plotRectObs(x, y, z, xd, yd, zd, alpha, axisname):
+    """
+    :param x, y, z: coordinates of the obstacle
+    :param xd, yd, zd: width of the obstacle
+    :param axisname: figure axis on which to plot
+    :return: add the obstacle to plot
+    """
+
+    # Define each pair of x,y,z coordinates. Each column is a vertex
+    xvec = [x, x+xd, x+xd, x,    x,    x+xd, x+xd, x]
+    yvec = [y, y,    y+yd, y+yd, y,    y,    y+yd, y+yd]
+    zvec = [z, z,    z,    z,    z+zd, z+zd, z+zd, z+zd]
+
+     # Specify order in which to connect each vertex to make the 6 faces
+    vertlist = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [0, 1, 2, 3], [4, 5, 6, 7]]
+    tupleList = zip(xvec, yvec, zvec)
+
+    # Add polygon to axis
+    poly3d = [[tupleList[vertlist[ix][iy]] for iy in xrange(len(vertlist[0]))] for ix in xrange(len(vertlist))]
+    collection = Poly3DCollection(poly3d, linewidth=1, alpha=alpha)
+    collection.set_color([0, 0, 0, alpha])
+    axisname.add_collection3d(collection)
+
+
+def heuristic(us,ut):
+    """
+    :param us: source node
+    :param ut: target node
+    :return: Euclidean distance between them
+    """
+    sx, sy, sz = us
+    tx, ty, tz = ut
+
+    dx, dy, dz = sx-tx, sy-ty, sz-tz
+
+    return heuristicScale * sqrt(dx*dx + dy*dy + dz*dz)
+
+
+def lineOfSight(*args):
+    """
+    :param us OR x1,y1,z1: source node, given as node number or coordinates
+    :param ut OR x2,y2,z2: target node, given as node number or coordinates
+    :return: boolean, whether or not line of sight exists between the two nodes
+    """
+
+    x1, y1, z1 = args[0]
+    x2, y2 ,z2 = args[1]
+
+    dx, dy, dz = x2 - x1,       y2 - y1,        z2 - z1
+    ax, ay, az = abs(dx)*2,     abs(dy)*2,      abs(dz)*2
+    sx, sy, sz = cmp(dx,0),     cmp(dy,0),      cmp(dz,0)
+
+    if ax >= max(ay,az):
+        yD = ay - ax/2
+        zD = az - ax/2
+
+        while x1 != x2:
+
+            if yD >= 0:
+                y1 += sy
+                yD -= ax
+            if zD >= 0:
+                z1 += sz
+                zD -= ax
+
+            x1 += sx; yD += ay; zD += az
+
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
+                return False
+
+    elif ay >= max(ax,az):
+        xD = ax - ay/2
+        zD = az - ay/2
+
+        while y1 != y2:
+
+            if xD >= 0:
+                x1 += sx
+                xD -= ay
+            if zD >= 0:
+                z1 += sz
+                zD -= ay
+
+            y1 += sy; xD += ax; zD += az
+
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
+                return False
+
+    elif az > max(ax,ay):
+        xD = ax - az/2
+        yD = ay - az/2
+
+        while z1 != z2:
+
+            if xD >= 0:
+                x1 += sx
+                xD -= az
+            if yD >= 0:
+                y1 += sy
+                yD -= az
+
+            z1 += sz; xD += ax; yD += ay
+
+            if isinf(gl.costMatrix[(x1,y1,z1)]):
+                return False
+
+    return True
+
+
+def postSmoothPath(pathArray):
+        """
+        :param pathArray: current path stored as a series of nodes
+        :return: Path smoothed in directions of uniform cost
+        """
+        k, t = 0, [pathArray[0]]
+
+        for i in xrange(1,len(pathArray)-1):
+            x1,y1,z1 = t[k]
+            x2,y2,z2 = pathArray[i+1]
+            if (abs(z1-z2)>0.01 and cZ > 1) or not lineOfSight(t[k],pathArray[i+1]):
+                k += 1
+                t.append(pathArray[i])
+
+        k += 1
+        t.append(pathArray[-1])
+
+        return t
+
+
+def genRandObs(minObs, maxObs, maxPercent, seed):
+    """
+    Generates random 1x1 obstacles during traversal
+
+    :param minObs: min mumber number of randomly generated obstacles
+    :param maxObs: max mumber number of randomly generated obstacles
+    :param maxPercent: max percent of map that can contain obstacles
+    :param seed: used to create deterministic results
+    :return: updates UAV map and plots obstacles
+    """
+    np.random.seed(seed + gl.stepCount)
+    num2gen = np.random.random_integers(minObs,maxObs)
+    randomint = np.random.random_integers
+    for i in xrange(num2gen):
+        # Stop generating obstacles if limit is reached
+        obsFraction = len(gl.map_ ) / numNodes
+        if obsFraction*100 > maxPercent:
+            break
+
+        # Generate obstacle location
+        newX, newY, newZ = randomint(1,sizeX), randomint(1,sizeY), randomint(1,sizeZ)
+        s_obs = (newX,newY,newZ)
+
+        # Don't place obstacle at start, goal, other obstacles, or within searchRadius
+        if s_obs == gl.start:
+            continue
+        if s_obs in gl.goals:
+            continue
+
+        curX, curY, curZ = gl.start
+        if max([abs(curX - newX),abs(curY - newY),abs(curZ - newZ)]) < searchRadius:
+            continue
+
+        # Update map
+        gl.map_[s_obs] = -2              # -2 indicated undetected obstacle
+        gl.number_of_obstacles += 1
+
+        # Add new obstacle to plot
+        if makeFigure:
+            plotRectObs(newX, newY, newZ, 1, 1, 1, 0.2, gl.ax1)
+
+
+def movingGoal(initX, initY, initZ, T):
+    """
+    Generate and execute moving goals
+    :param initX, initY, initZ: initial location of goal vertex
+    :param T: movement frequency, don't move every T iterations
+    :return: 1. Moves the goal specified by input parameters; 2. boolean, whether or not current goal has moved
+    """
+    goalMoved = False
+    if gl.stepCount % T == 0:  # move every T iterations
+
+        q = cantor(initX, initY, initZ)                                     # find unique cantor id
+        if q in gl.goalsVisited:                                            # break if we've visited this goal already
+            return
+        idx = np.where(gl.goals[:, 3] == q)[0][0]                           # get current location of goal
+        mgs_old = (gl.goals[idx, 0], gl.goals[idx, 1], gl.goals[idx, 2])    # get current node number of that goal
+
+        random.seed(q+3)
+        mgs = random.choice(succ(mgs_old))                                  # pick random successor to move to
+        mgx, mgy, mgz = mgs                                                 # get coordinates of that location
+        gl.goals[idx, 0:3] = mgx, mgy, mgz                                  # update location of node in goals array
+
+        if mgs_old == gl.goal:                                      # if old goal was current goal, update current goal
+            gl.goal = mgs
+            goalMoved = True
+
+        if makeFigure:
+            gl.goalhandles[q].remove()                                      # remove scatter point and add new one
+            gl.goalhandles[q] = gl.ax1.scatter(mgx, mgy, mgz, c='r')
+
+    return goalMoved
+
+
+def setupLevels():
+    """
+    :return: Dictionary of all hierarchical levels
+    """
+    L = {}
+
+    for level in xrange(gl.numlevels,-1,-1):
+    # Get dimensions for each level
+        if level == 0:
+            lsizeX, lsizeY, lsizeZ = sizeX, sizeY, sizeZ
+            L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
+        else:
+            sf = 2+(level-1)   # scale factor
+            lsize = max(sizeX/(2**sf), sizeY/(2**sf), sizeZ/(2**sf))
+            lsizeX, lsizeY, lsizeZ = lsize, lsize, lsize
+
+            if lsizeX > sizeX/gl.minclustersize:  lsizeX = sizeX/gl.minclustersize
+            if lsizeY > sizeY/gl.minclustersize:  lsizeY = sizeY/gl.minclustersize
+            if lsizeZ > sizeZ/gl.minclustersize:  lsizeZ = sizeZ/gl.minclustersize
+
+            L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
+
+    return L
+
+
+def searchAndUpdate(xNew,yNew,zNew,*args):
+    """
+    :param xNew, yNew, zNew: current location of UAV
+    :param args: checks node of pathToFollow to ensure they still have line-of-sight
+    :return: boolean, whether or not new obstacles exist nearby
+    """
+
+    cellsToUpdate = []
+    cellappend = cellsToUpdate.append
+    validPath = True
+
+    # Generate list of points to search
+    searchRange = []
+    sr_append = searchRange.append
+    x,y,z = int(round(xNew)), int(round(yNew)), int(round(zNew))
+    xmin, xmax = max(x-sr, 1), min(x+sr, sizeX)
+    ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
+    zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
+
+    # Define search region
+    [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
+
+    # Search them
+    for obsLoc in searchRange:
+        if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
+            # -1  = Known obstacle
+            # -2  = Newly detected/undetected obstacle
+
+            cellappend(obsLoc)      # Marking obstacles within search radius
+
+            gl.map_[obsLoc] = -1
+            gl.costMatrix[obsLoc] = float('inf')
+
+
+    if args:
+        path = args[0]
+        path = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path)]
+
+        # Check line of sight between nodes in path
+        if len(path) > 0:
+            # Extract portion within search radius
+            path_section = []
+            x1,y1,z1 = gl.start
+            x2,y2,z2 = path[0]
+            while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= max(refinementDistance,searchRadius):
+                path_section.append(path.pop(0))
+                if len(path) < 1:
+                    break
+                x2,y2,z2 = path[0]
+
+            # For each node in path_section:
+            for idx in xrange(len(path_section)-1):
+                if not lineOfSight(path_section[idx],path_section[idx+1]):
+                    validPath = False
+                    break
+
+            del path, path_section  # free up memory
+
+    if cellsToUpdate:
+        markSafetyMargin(cellsToUpdate,safetymargin)
+
+    del cellsToUpdate, searchRange   # free up memory
+    return validPath
+
+
+def simulateUAVmovement(pathToFollow):
+    """
+    :param pathToFollow: series of nodes for UAV to follow
+    :return: list of coordinates to move to
+    """
+    nextcoords = []
+    for k in xrange(len(pathToFollow)-1):
+        prevS, nextS = pathToFollow[k], pathToFollow[k+1]
+
+        prevX, prevY, prevZ = prevS
+        nextX, nextY, nextZ = nextS
+
+        dX, dY, dZ = nextX-prevX, nextY-prevY, nextZ-prevZ
+        maxDist = max(abs(dist) for dist in [dX, dY, dZ])
+
+        if maxDist <=1:
+            nextcoords.append((nextX, nextY, nextZ))
+        else:
+            for jj in xrange(1, int(maxDist+1)):
+                xFrac, yFrac, zFrac = dX/maxDist, dY/maxDist, dZ/maxDist
+                newX, newY, newZ = prevX + jj*xFrac, prevY + jj*yFrac, prevZ + jj*zFrac
+                nextcoords.append((newX, newY, newZ))
+
+    # Next node to go to is last node in array
+    nextcoords.reverse()
+    return nextcoords
+
+
+def euclideanDistance(us,ut):
+    """
+    :param us: source node
+    :param ut: target node
+    :return: Euclidean distance between the nodes
+    """
+    xs,ys,zs = us
+    xt,yt,zt = ut
+    dx,dy,dz = xs-xt, ys-yt, zs-zt
+
+    return sqrt(dx*dx + dy*dy + dz*dz)
+
+
+def findPath(L):
+    startTime = time.clock()
+    distance = euclideanDistance(gl.start,gl.goal)
+    path = [gl.start, gl.goal]
+    first_path = True
+
+    if distance <= distancerequirement*4: # path distance too short
+        path = L[0].computeShortestPath(path,False)
+        return path
+
+    # Get most coarse path first
+    for level in xrange(gl.numlevels,-1,-1):
+        if distance >= distancerequirement*L[level].maxlength:
+            try:
+                path = L[level].computeShortestPath(path,first_path)
+                first_path = False
+
+                break
+            except (KeyError, IndexError):
+                # if there's no path at that level, go a level smaller
+                continue
+
+
+
+    if level != 0 and time.clock()-startTime < pathComputationLimit:
+        refined_path = []
+        x1,y1,z1 = gl.start
+        x2,y2,z2 = path[0]
+        while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= refinementDistance:
+            refined_path.append(path.pop(0))
+            if len(path) == 1:
+                    break
+            x2,y2,z2 = path[0]
+
+        refined_path.append(path.pop(0))
+        # "path" now only contains nodes outside of the search radius
+
+        for newlevel in xrange(level-1,-1,-1):
+            if time.clock()-startTime < pathComputationLimit:
+                refined_path = L[newlevel].computeShortestPath(refined_path, first_path)
+            else:
+                break
+
+        path[:0] = refined_path     # insert refined path into the beginning of the original path
+
+    else:
+        return path
+
+    return path
+
+
+def parameterValues(ti, p1, p2):
+    """
+    Used to get parametric value t for Catmull-Rom spline
+    """
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+    return (((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2 )**0.5)**alpha + ti
+
+
+def CatmullRomPoints(p0, p1, p2, p3, numPts):
+    """
+    :param p0, p1, p2, p3:  (x,y,z) coordinates
+    :param numPts:  number of points to include in this curve segment.
+    :return: [p1, generated intermediary points, p2]
+    """
+
+    # Convert points to numpy for array multiplication
+    p0, p1, p2, p3 = map(np.array, [p0, p1, p2, p3])
+
+    # Calculate t0 to t3
+    t0 = 0
+    t1 = parameterValues(t0, p0, p1)
+    t2 = parameterValues(t1, p1, p2)
+    t3 = parameterValues(t2, p2, p3)
+
+    if t1==t0:
+        t1 = 1e-8
+
+    if t3==t2:
+        t3 = t2+1e-8
+
+    # Only find points between p1 and p2
+    t = np.linspace(t1, t2, numPts)
+
+    # Get point for each t-value using equation in: http://faculty.cs.tamu.edu/schaefer/research/catmull_rom.pdf
+    t = t.reshape(len(t),1)
+
+    L01 = (t1-t)/(t1-t0) * p0 + (t - t0) / (t1 - t0) * p1
+    L12 = (t2-t)/(t2-t1) * p1 + (t - t1) / (t2 - t1) * p2
+    L23 = (t3-t)/(t3-t2) * p2 + (t - t2) / (t3 - t2) * p3
+
+    L012 = (t2-t)/(t2-t0)*L01 + (t-t0)/(t2-t0)*L12
+    L123 = (t3-t)/(t3-t1)*L12 + (t-t1)/(t3-t1)*L23
+
+    C  = (t2-t)/(t2-t1)*L012 + (t-t1)/(t2-t1)*L123
+    return C
+
+
+def CatmullRomSpline(pts):
+    """
+    Generate Catmull-Rom splines for a path and return the new path
+    """
+
+    if len(pts) > 2:
+        # Duplicate first and last nodes to get their splines
+        pts.insert(0, pts[0])
+        pts.append(pts[-1])
+
+        sz = len(pts)
+
+        # Create list of (x,y,z) coordinates
+        C = []
+
+        for i in range(sz-3):
+            c = CatmullRomPoints(pts[i], pts[i+1], pts[i+2], pts[i+3], splinePoints)
+            C.extend(c.tolist())
+
+        return C
+
+
+
+    else:
+        # Cannot generate spline through two nodes
+        return pts
+
+
+def plotResultingWaypoints(waypoints,color,size,delete):
+    """
+    Useful for debugging, plots nodes used to form path, then removes them and shows the new ones
+    for subsequent paths
+    :param waypoints: vector of nodes
+    :return: updates plot with scatter points of each waypoint
+    """
+    if makeFigure:
+        X,Y,Z = [], [], []
+        if gl.stepCount > 1 and delete==True:
+            gl.hdl.remove()
+        for node in waypoints:
+            x,y,z = node
+            X.append(x), Y.append(y), Z.append(z)
+
+        X.pop(0), Y.pop(0), Z.pop(0)        # don't plot start node
+        gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
 
 
 def succ6(s):
@@ -120,618 +689,7 @@ def markSafetyMargin(cellsToUpdate,sm):
         del allsucc
 
 
-def succ(s):
-    """ Find which nodes can be moved to next from node s"""
-    x, y, z = s
 
-    # Define successor states, one down in z-direction
-    sDel = []
-    succNode = [
-        (x,   y+1, z-1),
-        (x+1, y+1, z-1),
-        (x+1, y,   z-1),
-        (x+1, y-1, z-1),
-        (x,   y-1, z-1),
-        (x-1, y-1, z-1),
-        (x-1, y,   z-1),
-        (x-1, y+1, z-1),
-        (x,   y,   z-1),
-        (x,   y+1, z),
-        (x+1, y+1, z),
-        (x+1, y,   z),
-        (x+1, y-1, z),
-        (x,   y-1, z),
-        (x-1, y-1, z),
-        (x-1, y,   z),
-        (x-1, y+1, z),
-        (x,   y+1, z+1),
-        (x+1, y+1, z+1),
-        (x+1, y,   z+1),
-        (x+1, y-1, z+1),
-        (x,   y-1, z+1),
-        (x-1, y-1, z+1),
-        (x-1, y,   z+1),
-        (x-1, y+1, z+1),
-        (x,   y,   z+1),
-    ]
-
-    # Nodes to delete when on a boundary
-    if x == sizeX:
-        sDel += 1,2,3,10,11,12,18,19,20
-    elif x == 1:
-        sDel +=5,6,7,14,15,16,22,23,24
-
-    if y == sizeY:
-        sDel += 0,1,7,9,10,16,17,18,24
-    elif y == 1:
-        sDel += 3,4,5,12,13,14,20,21,22
-
-    if z == sizeZ:
-        sDel += 17,18,19,20,21,22,23,24,25
-    elif z == 1:
-        sDel += 0,1,2,3,4,5,6,7,8
-
-    if sDel:
-        sDel = set(sDel)
-        for i in sorted(sDel, reverse=True):
-            del succNode[i]
-
-    return succNode
-
-
-def cantor(x,y,z):
-    """
-    :param x, y, z: node coordinates
-    :return: single unique integer of the 3 coordinates using cantor pairing function
-    """
-    x = 0.5 * (x + y) * (x + y + 1) + y
-    x = 0.5 * (x + z) * (x + z + 1) + z
-    return x
-
-
-def rectObs(locX, locY, locZ, dimX, dimY, dimZ):
-    """
-    :param dimX, dimY, dimZ: specifies the dimensions of the obstacle
-    :param locX, locY, locZ: defines the bottom left corner of the obstacle
-    :return: array of the individual nodes which compose the larger cuboid
-    """
-    obsLocX, obsLocY, obsLocZ = [],[],[]
-    appX, appY, appZ = obsLocX.append, obsLocY.append, obsLocZ.append
-    obsLocs = []
-    obs_append = obsLocs.append
-    for dx in xrange(0, dimX):
-        for dy in xrange(0, dimY):
-            for dz in xrange(0, dimZ):
-                appX(locX + dx), appY(locY + dy), appZ(locZ + dz)
-                obs_append((locX + dx, locY + dy, locZ + dz))
-
-    #return np.column_stack((obsLocX, obsLocY, obsLocZ))
-    return obsLocs
-
-
-def plotRectObs(x, y, z, xd, yd, zd, alpha, axisname):
-    """
-    :param x, y, z: coordinates of the obstacle
-    :param xd, yd, zd: width of the obstacle
-    :param axisname: figure axis on which to plot
-    :return: add the obstacle to plot
-    """
-
-    #x, y, z = x-0.5, y-0.5, z-0.5
-
-    # Define each pair of x,y,z coordinates. Each column is a vertex
-    xvec = [x, x+xd, x+xd, x,    x,    x+xd, x+xd, x]
-    yvec = [y, y,    y+yd, y+yd, y,    y,    y+yd, y+yd]
-    zvec = [z, z,    z,    z,    z+zd, z+zd, z+zd, z+zd]
-
-     # Specify order in which to connect each vertex to make the 6 faces
-    vertlist = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [0, 1, 2, 3], [4, 5, 6, 7]]
-    tupleList = zip(xvec, yvec, zvec)
-
-    # Add polygon to axis
-    poly3d = [[tupleList[vertlist[ix][iy]] for iy in xrange(len(vertlist[0]))] for ix in xrange(len(vertlist))]
-    #axisname.scatter(xvec, yvec, zvec)
-    collection = Poly3DCollection(poly3d, linewidth=1, alpha=alpha)
-    collection.set_color([0, 0, 0, alpha])
-    axisname.add_collection3d(collection)
-
-
-def heuristic(us,ut):
-    """
-    :param us: source node
-    :param ut: target node
-    :return: Euclidean distance between them
-    """
-    sx, sy, sz = us
-    tx, ty, tz = ut
-
-    dx, dy, dz = sx-tx, sy-ty, sz-tz
-
-    return heuristicScale * sqrt(dx*dx + dy*dy + dz*dz)
-
-
-def lineOfSight(*args):
-    """
-    :param us OR x1,y1,z1: source node, given as node number or coordinates
-    :param ut OR x2,y2,z2: target node, given as node number or coordinates
-    :return: boolean, whether or not line of sight exists between the two nodes
-    """
-
-    # if len(args) == 6:
-    #     x1, y1, z1, x2, y2, z2 = args
-    # elif len(args) == 2:
-    #     x1, y1, z1 = args[0]
-    #     x2, y2 ,z2 = args[1]
-    # else:
-    #     raise TypeError('lineOfSight() take either 2 or 6 arguments')
-
-    x1, y1, z1 = args[0]
-    x2, y2 ,z2 = args[1]
-
-    dx, dy, dz = x2 - x1,       y2 - y1,        z2 - z1
-    ax, ay, az = abs(dx)*2,     abs(dy)*2,      abs(dz)*2
-    sx, sy, sz = cmp(dx,0),     cmp(dy,0),      cmp(dz,0)
-
-    if ax >= max(ay,az):
-        yD = ay - ax/2
-        zD = az - ax/2
-
-        while x1 != x2:
-
-            if yD >= 0:
-                y1 += sy
-                yD -= ax
-            if zD >= 0:
-                z1 += sz
-                zD -= ax
-
-            x1 += sx; yD += ay; zD += az
-
-            if isinf(gl.costMatrix[(x1,y1,z1)]):
-                return False
-    elif ay >= max(ax,az):
-        xD = ax - ay/2
-        zD = az - ay/2
-
-        while y1 != y2:
-
-            if xD >= 0:
-                x1 += sx
-                xD -= ay
-            if zD >= 0:
-                z1 += sz
-                zD -= ay
-
-            y1 += sy; xD += ax; zD += az
-
-            if isinf(gl.costMatrix[(x1,y1,z1)]):
-                return False
-
-    elif az > max(ax,ay):
-        xD = ax - az/2
-        yD = ay - az/2
-
-        while z1 != z2:
-
-            if xD >= 0:
-                x1 += sx
-                xD -= az
-            if yD >= 0:
-                y1 += sy
-                yD -= az
-
-            z1 += sz; xD += ax; yD += ay
-
-            if isinf(gl.costMatrix[(x1,y1,z1)]):
-                return False
-    return True
-
-
-def postSmoothPath(pathArray):
-        """
-        :param pathArray: current path stored as a series of nodes
-        :return: Path smoothed in directions of uniform cost
-        """
-        k, t = 0, [pathArray[0]]
-
-        for i in xrange(1,len(pathArray)-1):
-            x1,y1,z1 = t[k]
-            x2,y2,z2 = pathArray[i+1]
-            if (abs(z1-z2)>0.01 and cZ > 1) or not lineOfSight(t[k],pathArray[i+1]):
-                k += 1
-                t.append(pathArray[i])
-
-        k += 1
-        t.append(pathArray[-1])
-
-        return t
-
-
-def genRandObs(minObs, maxObs, maxPercent, seed):
-    """
-    Generate random obstacles
-    :param minObs: min mumber number of randomly generated obstacles
-    :param maxObs: max mumber number of randomly generated obstacles
-    :param maxPercent: max percent of map that can contain obstacles
-    :param seed: used to create deterministic results
-    :return: updates UAV map and plots obstacles
-    """
-    np.random.seed(seed + gl.stepCount)
-    num2gen = np.random.random_integers(minObs,maxObs)
-    randomint = np.random.random_integers
-    for i in xrange(num2gen):
-        # Stop generating obstacles if limit is reached
-        obsFraction = gl.map_[gl.map_ < 0].size / numNodes
-        if obsFraction > maxPercent:
-            break
-
-
-        # Generate obstacle location
-        newX, newY, newZ = randomint(1,sizeX), randomint(1,sizeY), randomint(1,sizeZ)
-        s_obs = (newX,newY,newZ)
-        #print 'node: ' + str(s_obs) + ', stepCount: ' + str(g.stepCount)
-
-        # Don't place obstacle at start, goal, other obstacles, or within searchRadius
-        if s_obs == gl.start:
-            continue
-        if s_obs in gl.goals:
-            continue
-
-        curX, curY, curZ = (gl.start)     # S[g.start]  # S[1,g.start], S[2,g.start], S[3,g.start]
-        if max([abs(curX - newX),abs(curY - newY),abs(curZ - newZ)]) < searchRadius:
-            continue
-
-        # Update map
-        gl.map_[s_obs] = -2              # -2 indicated undetected obstacle
-        gl.number_of_obstacles += 1
-
-        # Add new obstacle to plot
-        if makeFigure:
-            plotRectObs(newX, newY, newZ, 1, 1, 1, 0.2, gl.ax1)
-
-
-def movingGoal(initX, initY, initZ, T):
-    """
-    Generate ane execute moving goals
-    :param initX, initY, initZ: initial location of goal vertex
-    :param T: movement frequency, don't move every T iterations
-    :return: 1. Moves the goal specified by input parameters; 2. boolean, whether or not goal has moved
-    """
-    goalMoved = False
-    if gl.stepCount % T == 0:  # move every T iterations
-
-        q = cantor(initX, initY, initZ)                                     # find unique cantor id
-        if q in gl.goalsVisited:                                            # break if we've visited it already
-            return
-        idx = np.where(gl.goals[:, 3] == q)[0][0]                           # get current location of goal
-        mgs_old = (gl.goals[idx, 0], gl.goals[idx, 1], gl.goals[idx, 2])    # get current node number of that goal
-
-
-        random.seed(q+3)
-        mgs = random.choice(succ(mgs_old))                                  # pick random successor to move to
-        mgx, mgy, mgz = mgs                                                 # get coordinates of that location
-        gl.goals[idx, 0:3] = mgx, mgy, mgz                                  # update location of node in goals array
-
-        if mgs_old == gl.goal:                                      # if old goal was current goal, update current goal
-            gl.goal = mgs
-            goalMoved = True
-
-        if makeFigure:
-            gl.goalhandles[q].remove()               # remove scatter point and add new one
-            gl.goalhandles[q] = gl.ax1.scatter(mgx, mgy, mgz, c='r')
-
-    return goalMoved
-
-
-def isPowerOfTwo(x):
-    """
-    :param x: any number, used for map dimensions
-    :return: boolean, whether or not it's a power of 2
-    """
-    return x != 0 and ((x & (x - 1)) == 0)
-
-
-def clusterDimCheck():
-    """
-    :return: boolean, makes sure all appropriate values are a function of 2
-    """
-    if not (isPowerOfTwo(sizeX) and isPowerOfTwo(sizeY) and isPowerOfTwo(sizeZ)):
-        raise ValueError('Map dimensions must be a power of 2')
-
-    if not (isPowerOfTwo(gl.minclustersize)):
-        raise ValueError('Value of all \'minclustersize\' must be a power of 2')
-
-
-def setupLevels():
-    """
-    :return: Dictionary of all hierarchical levels
-    """
-    L = {}
-
-    for level in xrange(gl.numlevels,-1,-1):
-    # Get dimensions for each level
-        if level == 0:
-            lsizeX, lsizeY, lsizeZ = sizeX, sizeY, sizeZ
-            L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
-        else:
-            # number of clusters in each dimension = number of clusters in largest dimension
-            sf = 2+(level-1)   # scale factor
-            lsize = max(sizeX/(2**sf), sizeY/(2**sf), sizeZ/(2**sf))
-            lsizeX, lsizeY, lsizeZ = lsize, lsize, lsize
-
-            if lsizeX > sizeX/gl.minclustersize:  lsizeX = sizeX/gl.minclustersize
-            if lsizeY > sizeY/gl.minclustersize:  lsizeY = sizeY/gl.minclustersize
-            if lsizeZ > sizeZ/gl.minclustersize:  lsizeZ = sizeZ/gl.minclustersize
-
-            L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
-
-    return L
-
-
-def searchAndUpdate(xNew,yNew,zNew,*args):
-    """
-    :param xNew, yNew, zNew: current location of UAV
-    :param args: checks node of pathToFollow to ensure they still have line-of-sight
-    :return: boolean, whether or not new obstacles exist nearby
-    """
-    tic = time.clock()
-    cellsToUpdate = []
-    cellappend = cellsToUpdate.append
-    validPath = True
-
-    # Generate list of points to search
-    searchRange = []
-    sr_append = searchRange.append
-    x,y,z = int(round(xNew)), int(round(yNew)), int(round(zNew))
-    xmin, xmax = max(x-sr, 1), min(x+sr, sizeX)
-    ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
-    zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
-
-    # Define search region
-    [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
-
-
-
-    # Search them
-    for obsLoc in searchRange:
-        if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
-
-            # Mark obstacles within search radius
-            cellappend(obsLoc)
-
-            gl.map_[obsLoc] = -1
-            gl.costMatrix[obsLoc] = float('inf')
-
-
-    if args:
-        path = args[0]
-        path = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path)]
-
-
-        # Check line of sight between smoothed spline path
-        if len(path) > 0:
-            # Extract portion within search radius
-            path_section = []
-            x1,y1,z1 = gl.start
-            x2,y2,z2 = path[0]
-            while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= max(refinementDistance,searchRadius):
-                path_section.append(path.pop(0))
-                if len(path) < 1:
-                    break
-                x2,y2,z2 = path[0]
-
-            #for each node in path_section:
-            for idx in xrange(len(path_section)-1):
-                if not lineOfSight(path_section[idx],path_section[idx+1]):
-                    validPath = False
-                    break
-
-            del path, path_section
-
-    if cellsToUpdate:
-        markSafetyMargin(cellsToUpdate,safetymargin)
-
-    del cellsToUpdate, searchRange   # free up memory
-    return validPath
-
-
-def simulateUAVmovement(pathToFollow):
-    """
-    :param pathToFollow: series of nodes for UAV to follow
-    :return: list of coordinates to move to
-    """
-    nextcoords = []
-    for k in xrange(len(pathToFollow)-1):
-        prevS, nextS = pathToFollow[k], pathToFollow[k+1]
-
-        prevX, prevY, prevZ = prevS
-        nextX, nextY, nextZ = nextS
-
-        dX, dY, dZ = nextX-prevX, nextY-prevY, nextZ-prevZ
-
-        maxDist = max(abs(dist) for dist in [dX, dY, dZ])
-
-        if maxDist <=1:
-            nextcoords.append((nextX, nextY, nextZ))
-        else:
-            for jj in xrange(1, int(maxDist+1)):
-                xFrac, yFrac, zFrac = dX/maxDist, dY/maxDist, dZ/maxDist
-                newX, newY, newZ = prevX + jj*xFrac, prevY + jj*yFrac, prevZ + jj*zFrac
-                nextcoords.append((newX, newY, newZ))
-
-
-    # Next node to go to is last node in array
-    nextcoords.reverse()
-    return nextcoords
-
-
-def euclideanDistance(us,ut):
-    """
-    :param us: source node
-    :param ut: target node
-    :return: euclidean distance between the nodes
-    """
-    xs,ys,zs = us
-    xt,yt,zt = ut
-    dx,dy,dz = xs-xt, ys-yt, zs-zt
-
-    return sqrt(dx*dx + dy*dy + dz*dz)
-
-
-def findPath(L):
-    startTime = time.clock()
-    distance = euclideanDistance(gl.start,gl.goal)
-    path = [gl.start, gl.goal]
-    first_path = True
-
-    if distance <= distancerequirement*4: # path distance too short
-        path = L[0].computeShortestPath(path,False)
-        return path
-
-    # Get most coarse path first
-    for level in xrange(gl.numlevels,-1,-1):                        # for each level
-        if distance >= distancerequirement*L[level].maxlength:       # only for big enough distances
-            try:
-            #    L[level].initialize_first(gl.start, gl.goal)
-                path = L[level].computeShortestPath(path,first_path)
-                #plotResultingWaypoints(path, 'b', 10)
-                first_path = False
-
-                break
-            except (KeyError, IndexError):    # if there's no path at that level, go a level smaller
-                continue
-
-
-
-    if level != 0 and time.clock()-startTime < pathComputationLimit:
-        refined_path = []
-        #while euclideanDistance(gl.start,path[0]) <= refinementDistance:
-        x1,y1,z1 = gl.start
-        x2,y2,z2 = path[0]
-        #while (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 <= refinementDistanceSquared:
-        while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= refinementDistance:
-            refined_path.append(path.pop(0))
-            if len(path) == 1:
-                    break
-            x2,y2,z2 = path[0]
-
-        refined_path.append(path.pop(0))   # "path" now only contains nodes outside of the search radius
-
-
-        for newlevel in xrange(level-1,-1,-1):
-            if time.clock()-startTime < pathComputationLimit:
-                refined_path = L[newlevel].computeShortestPath(refined_path, first_path)
-                #plotResultingWaypoints(refined_path, 'b', 10)
-            else:
-                break
-
-        path[:0] = refined_path                     # insert refined path into the beginning of the original path
-
-    else:
-        return path
-
-
-
-    return path
-
-
-def parameterValues(ti, p1, p2):
-    """
-    used to get parametric value t for Catmull-Rom spline
-    """
-    x1, y1, z1 = p1
-    x2, y2, z2 = p2
-    return (((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2 )**0.5)**alpha + ti
-
-
-def CatmullRomPoints(p0, p1, p2, p3, numPts):
-    """
-    :param p0, p1, p2, p3:  (x,y,z) coordinates
-    :param numPts:  number of points to include in this curve segment.
-    :return: [p1, generated intermediary points, p2]
-    """
-
-    # Convert points to numpy for array multiplication
-    p0, p1, p2, p3 = map(np.array, [p0, p1, p2, p3])
-
-    # Calculate t0 to t3
-    t0 = 0
-    t1 = parameterValues(t0, p0, p1)
-    t2 = parameterValues(t1, p1, p2)
-    t3 = parameterValues(t2, p2, p3)
-
-    if t1==t0:
-        t1 = 1e-8
-
-    if t3==t2:
-        t3 = t2+1e-8
-
-    # Only find points between p1 and p2
-    t = np.linspace(t1, t2, numPts)
-
-    # Get point for each t-value using equation in: http://faculty.cs.tamu.edu/schaefer/research/catmull_rom.pdf
-    t = t.reshape(len(t),1)
-
-    L01 = (t1-t)/(t1-t0) * p0 + (t - t0) / (t1 - t0) * p1
-    L12 = (t2-t)/(t2-t1) * p1 + (t - t1) / (t2 - t1) * p2
-    L23 = (t3-t)/(t3-t2) * p2 + (t - t2) / (t3 - t2) * p3
-
-    L012 = (t2-t)/(t2-t0)*L01 + (t-t0)/(t2-t0)*L12
-    L123 = (t3-t)/(t3-t1)*L12 + (t-t1)/(t3-t1)*L23
-
-    C  = (t2-t)/(t2-t1)*L012 + (t-t1)/(t2-t1)*L123
-    return C
-
-
-def CatmullRomSpline(pts):
-    """
-    Generate Catmull-Rom spline for a chain of points and return the combined curve.
-    """
-
-    if len(pts) > 2:
-        # Duplicate first and last nodes to get their splines
-        pts.insert(0, pts[0])
-        pts.append(pts[-1])
-
-        sz = len(pts)
-
-        # Create list of (x,y,z) coordinates
-        C = []
-
-        for i in range(sz-3):
-            c = CatmullRomPoints(pts[i], pts[i+1], pts[i+2], pts[i+3], splinePoints)
-            C.extend(c.tolist())
-
-        return C
-
-
-
-    else:
-        # Cannot generate spline through two nodes
-        return pts
-
-
-def plotResultingWaypoints(waypoints,color,size,delete):
-    """
-    Useful for debugging, plots coarse waypoints for current coarse path, then removes them and shows the new ones
-    for subsequent coarse paths
-    :param waypoints: vector of coarse nodes
-    :return: updates plot with scatter points of each waypoint
-    """
-    if makeFigure:
-        X,Y,Z = [], [], []
-        if gl.stepCount > 1 and delete==True:
-            gl.hdl.remove()
-        for node in waypoints:
-            x,y,z = node
-            X.append(x), Y.append(y), Z.append(z)
-
-        X.pop(0), Y.pop(0), Z.pop(0)        # don't plot start node
-        gl.hdl = gl.ax1.scatter(X,Y,Z, c=color, s=size)
-
-
-
-""" Creating classes """
 
 class CL:   # Create level
     """ Creates a class containing the map properties for a given level """
@@ -739,25 +697,18 @@ class CL:   # Create level
     def __init__(self, levelnumber, lsizeX, lsizeY, lsizeZ):
         self.levelnumber = levelnumber
 
-        self.sizeX = lsizeX
-        self.sizeY = lsizeY
-        self.sizeZ = lsizeZ
-        self.zMove = self.sizeX*self.sizeY
-        self.numclusters = self.sizeX*self.sizeY*self.sizeZ
-
-        self.lengthX = int(sizeX/lsizeX)
+        self.lengthX = int(sizeX/lsizeX)        # distance of successor nodes
         self.lengthY = int(sizeY/lsizeY)
         self.lengthZ = int(sizeZ/lsizeZ)
         self.maxlength = max(self.lengthX, self.lengthY, self.lengthZ)
         self.minlength = min(self.lengthX, self.lengthY, self.lengthZ)
-        self.numNodes = self.sizeX*self.sizeY*self.sizeZ
 
 
     def initialize(self, startnode, goalnode):
         """
         :param startnode: start location
         :param goalnode: goal location
-        :return: resets class variables to perform computeShortestPath
+        :return: initialization to perform computeShortestPath
         """
 
         CL.U = []
@@ -769,7 +720,6 @@ class CL:   # Create level
 
         CL.g[goalnode] = float('inf')
         CL.rhs[goalnode] = 0
-
 
         self.add_node(heuristic(startnode, goalnode), 0, goalnode)    # add goal to queue
 
@@ -836,6 +786,7 @@ class CL:   # Create level
 
         dx, dy, dz = us[0]-ut[0], us[1]-ut[1], us[2]-ut[2]
 
+        # Modify these lines if cX and cY are not 1
         if dz != 0:
             sf = cZ     # scale factor
         else:
@@ -909,14 +860,13 @@ class CL:   # Create level
             for i in sorted(sDel, reverse=True):
                 del succNode[i]
 
-        # check if start node is a successor
+        # Check if start node is a successor
         startx, starty, startz = startnode
         dx, dy, dz = abs(x-startx), abs(y-starty), abs(z-startz)
         if max(dx,dy,dz) < 2*self.maxlength:
-
             succNode.append(startnode)
 
-        return succNode  # [sn for sn in succNode if sn > 0]
+        return succNode
 
 
     def computeShortestPath(self, waypoints, first_path):
@@ -980,19 +930,19 @@ class CL:   # Create level
                 gl.closed_list += 1
 
 
+            if isinf(gl.costMatrix[CL.rhs[startnode]]):
+                raise Exception('No path exists')
+
             nextpos = [startnode]
             while nextpos[-1] != goalnode:
                 nextpos.append(CL.bptr[nextpos[-1]])
             new_waypoints.extend(nextpos[0:-1])
         new_waypoints.append(goalnode)
 
-        if isinf(gl.costMatrix[CL.rhs[startnode]]):
-            raise Exception('No path exists')
-
         return new_waypoints
 
 
-# Recusively get size of object
+# Recusively get size of an object
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
 
@@ -1003,7 +953,9 @@ def total_size(o, handlers={}, verbose=False):
         handlers = {SomeContainerClass: iter,
                     OtherContainerClass: OtherContainerClass.get_elements}
 
+    Source: http://code.activestate.com/recipes/577504/ (this link was in python3 documentation)
     """
+
     dict_handler = lambda d: chain.from_iterable(d.items())
     all_handlers = {tuple: iter,
                     list: iter,

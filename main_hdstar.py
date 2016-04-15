@@ -12,49 +12,30 @@ import config_program
 import all_functions as fcn
 
 
-
+# To reload settings for multiple trials
 if gl.testingMode:
     reload(gl)
     reload(config_program)
     reload(fcn)
 
-
-
-"""
-USER CONFIGURATION
-    use config_user.py to modify user inputs
-"""
-
-
-"""
-PROGRAM CONFIGURATION
-    done in config_program.py
-    creating local copies of constants here
-"""
+# Creating local copies of constants
 
 sizeX, sizeY, sizeZ, cX, cY, cZ = gl.sizeX, gl.sizeY, gl.sizeZ, gl.cX, gl.cY, gl.cZ
-
 searchRadius, useMovingGoals = gl.searchRadius, gl.useMovingGoals
 makeRandObs, makeFigure, makeMovie, numlevels = gl.makeRandObs, gl.makeFigure, gl.makeMovie, gl.numlevels
-
 minObs, maxObs, maxPercent, seedDyn, seedStatic = gl.minObs, gl.maxObs, gl.maxPercent, gl.seedDyn, gl.seedStatic
 initX, initY, initZ, T, rXdim, rYdim, rZdim = gl.initX, gl.initY, gl.initZ, gl.T, gl.rXdim, gl.rYdim, gl.rZdim
 rXstart, rYstart, rZstart = gl.rXstart, gl.rYstart, gl.rZstart
 refinementDistance = gl.refinementDistance
 
-tic = time.time()
 if makeMovie:   frames = []
 
 
-
-""" Setup abstract levels """
+""" Setup abstract levels and variables for performance testing """
 L = fcn.setupLevels()
 time_findPath = []
 total_cost = 0
-path = [gl.start]
 
-
-#numlevels = 0
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
     xNew, yNew, zNew = gl.start                         # get current location
@@ -63,27 +44,26 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
     while gl.start != gl.goal:
 
         """ Compute path, smooth it, make a spline, and divide into a series of adjacent points to follow """
-        tic1 = time.clock()    # start timer
+        tic = time.clock()    # start timer
 
         path = fcn.findPath(L)
         path = fcn.postSmoothPath(path)
         path = fcn.CatmullRomSpline(path)
         path = fcn.simulateUAVmovement(path)
 
-        findPathTime = time.clock() - tic1  # end timer
-
+        findPathTime = time.clock() - tic   # end timer
         time_findPath.append(findPathTime)  # record time
         if gl.stepCount == 1:
-            initialFindPathTime = findPathTime
+            initialFindPathTime = findPathTime  # record time to find
 
-        xOrig, yOrig, zOrig = gl.start     # to identify when leaving refinement region
+        xOrig, yOrig, zOrig = gl.start      # to identify when leaving refinement region
         dfs = 0                             # distance from start, used to identify when path needs to be updated
         goalMoved = False                   # indicates whether or not the goal has moved
         validPath = True                    # indicates whether or not path being followed is still valid
 
         while not goalMoved and validPath and gl.start != gl.goal and path:
 
-            # 4. Follow those points until path is invalidated or we reach end of refinement region
+            # Follow those points until path is invalidated or we reach end of refinement region
             for point in path:
 
                 # Save current position, then move to next point
@@ -92,11 +72,9 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 oldstart = gl.start
                 gl.start = (round(xNew), round(yNew), round(zNew))   # update start coordinate
 
-
                 # Update distance from start
                 dx, dy, dz = xOrig-xNew, yOrig-yNew, zOrig-zNew
                 dfs = sqrt(dx**2 + dy**2 + dz**2)
-
 
                 # Plot movement and save figure
                 if makeMovie:
@@ -108,7 +86,6 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
                 # Update total cost of path
                 total_cost += L[0].computeCost((xOld, yOld, zOld), (xNew, yNew, zNew), False)
-
 
                 # Generate random obstacles
                 if makeRandObs:
@@ -131,17 +108,6 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                     validPath = False
                     break
 
-                # if isinf(gl.costMatrix[path[0]]):
-                #     validPath = False
-
-
-
-
-
-    #k = np.nonzero(gl.goals[:,0]==gl.goal[0] and gl.goals[:,1]==gl.goal[1] and gl.goals[:,2]==gl.goal[2]) # find current goal
-  #  k = np.where((gl.goals[:,0]==gl.goal[0]) and (gl.goals[:,1]==gl.goal[1]))
-
-
     if len(gl.goals) > 1:
         print 'finding next goal...'
 
@@ -152,7 +118,6 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
         # Whichever row shows up in k1, k2, and k3 is the row with the current goal
         k = np.intersect1d(np.intersect1d(k1,k2),k3)
-
 
         gl.goalsVisited.append(gl.goals[k,3])           # save its goal ID
         gl.goals = np.delete(gl.goals, k, 0)            # delete that row
@@ -167,19 +132,8 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
         idx, __ = min(hyp.items(), key=lambda x:x[1])
         gl.goal = (gl.goals[idx,0], gl.goals[idx,1], gl.goals[idx,2])
 
-        # Reconfigure levels (needed to add in successors for new goal node)
-        #L = fcn.setupLevels()
-
-
-
-
 # Get averages, in milliseconds
 mean_time_findPath = 1000*sum(time_findPath) / len(time_findPath)
-
-
-# print len(gl.costMatrix)
-# print 'Total size: ' + str(fcn.getsizeof(gl.costMatrix))
-# print str(fcn.total_size(gl.costMatrix, verbose=False))
 
 
 def hdstar_outputs():

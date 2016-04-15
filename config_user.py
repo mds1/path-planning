@@ -7,8 +7,8 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
 
+testingMode = False             # suppresses figure generation, outputs from main*.py are not printed
 
-testingMode = False  # suppresses figure generation, outputs from main*.py are not printed
 
 makeFigure = True
 makeMovie = False
@@ -64,14 +64,12 @@ imgformat = 'png'       # currently only works for png
 
 
 
-
-
 # Generate Random Dynamic Obstacles
 randomint = np.random.random_integers
 
 minObs = 5
 maxObs = 50
-maxPercent = 0.05
+maxPercent = 5
 seedDyn = np.random.randint(0,1000)
 #seedDyn = np.random.randint(0,10)
 #seedDyn = 432
