@@ -19,7 +19,6 @@ if gl.testingMode:
     reload(fcn)
 
 # Creating local copies of constants
-
 sizeX, sizeY, sizeZ, cX, cY, cZ = gl.sizeX, gl.sizeY, gl.sizeZ, gl.cX, gl.cY, gl.cZ
 searchRadius, useMovingGoals = gl.searchRadius, gl.useMovingGoals
 makeRandObs, makeFigure, makeMovie, numlevels = gl.makeRandObs, gl.makeFigure, gl.makeMovie, gl.numlevels
@@ -142,9 +141,11 @@ def hdstar_outputs():
 if not gl.testingMode:
     print 'Run succeeded!\n'
     print 'Elapsed time: ' + str(time.time() - tic) + ' seconds'
-    print mean_time_findPath
-    print gl.closed_list
-    print total_cost
+    print 'Total cost: ' + str(total_cost)
+    print 'Path-finding Time: ' + str(mean_time_findPath)
+    print 'Expanded nodes: ' + str(gl.closed_list)
+
+
 
 
 if makeMovie:
