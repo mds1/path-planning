@@ -53,7 +53,6 @@ time_findPath = []
 total_cost = 0
 path = [gl.start]
 
-fcn.initial_memory()
 
 #numlevels = 0
 """ Begin main algorithm """
@@ -68,8 +67,8 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
         path = fcn.findPath(L)
         path = fcn.postSmoothPath(path)
-        pathSearch = fcn.CatmullRomSpline(path)
-        path = fcn.simulateUAVmovement(pathSearch)
+        path = fcn.CatmullRomSpline(path)
+        path = fcn.simulateUAVmovement(path)
 
         findPathTime = time.clock() - tic1  # end timer
 
@@ -189,7 +188,9 @@ def hdstar_outputs():
 if not gl.testingMode:
     print 'Run succeeded!\n'
     print 'Elapsed time: ' + str(time.time() - tic) + ' seconds'
-
+    print mean_time_findPath
+    print gl.closed_list
+    print total_cost
 
 
 if makeMovie:
@@ -211,7 +212,7 @@ if makeMovie:
     print 'Video complete!'
 
 if makeFigure:
- #   plt.savefig('dstarFig.pdf',bbox_inches='tight')
+    plt.savefig('dstarFig.pdf',bbox_inches='tight')
     print 'Figure is open. Close figure to end script'
     plt.show()
 

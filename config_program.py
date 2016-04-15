@@ -155,6 +155,13 @@ if gl.makeFigure:
     gl.ax1.w_zaxis.line.set_lw(0.)
     gl.ax1.set_zticks([])
 
+    # Turn off x and y-axis
+    gl.ax1.xaxis.set_ticklabels([])
+    gl.ax1.yaxis.set_ticklabels([])
+
+
+
+
     # Label start and goal nodes
     gl.ax1.text(1,1,1,'Start',zdir='y')
   #  gl.ax1.text(128,128,1,'Goal',zdir='y')

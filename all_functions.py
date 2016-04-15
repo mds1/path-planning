@@ -31,8 +31,6 @@ heuristicScale = gl.heuristicScale
 makeFigure = gl.makeFigure
 makeMovie = gl.makeMovie
 restrictVerticalMovement = gl.restrictVerticalMovement
-minclustersize = gl.minclustersize
-distBetweenL0Paths = gl.distBetweenL0Paths
 distancerequirement = gl.distancerequirement
 refinementDistance, refinementDistanceSquared = gl.refinementDistance, gl.refinementDistance**2
 safetymargin = gl.safetymargin
@@ -117,6 +115,8 @@ def markSafetyMargin(cellsToUpdate,sm):
         for node in allsucc:
             #gl.map_[node] = -1
             gl.costMatrix[node] = float('inf')
+
+
         del allsucc
 
 
@@ -257,14 +257,16 @@ def lineOfSight(*args):
     :return: boolean, whether or not line of sight exists between the two nodes
     """
 
-    if len(args) == 6:
-        x1, y1, z1, x2, y2, z2 = args
-    elif len(args) == 2:
-        x1, y1, z1 = args[0]
-        x2, y2 ,z2 = args[1]
-    else:
-        raise TypeError('lineOfSight() take either 2 or 6 arguments')
+    # if len(args) == 6:
+    #     x1, y1, z1, x2, y2, z2 = args
+    # elif len(args) == 2:
+    #     x1, y1, z1 = args[0]
+    #     x2, y2 ,z2 = args[1]
+    # else:
+    #     raise TypeError('lineOfSight() take either 2 or 6 arguments')
 
+    x1, y1, z1 = args[0]
+    x2, y2 ,z2 = args[1]
 
     dx, dy, dz = x2 - x1,       y2 - y1,        z2 - z1
     ax, ay, az = abs(dx)*2,     abs(dy)*2,      abs(dz)*2
@@ -275,7 +277,6 @@ def lineOfSight(*args):
         zD = az - ax/2
 
         while x1 != x2:
-            xk, yk, zk = x1, y1, z1
 
             if yD >= 0:
                 y1 += sy
@@ -293,7 +294,6 @@ def lineOfSight(*args):
         zD = az - ay/2
 
         while y1 != y2:
-            xk, yk, zk = x1, y1, z1
 
             if xD >= 0:
                 x1 += sx
@@ -312,7 +312,6 @@ def lineOfSight(*args):
         yD = ay - az/2
 
         while z1 != z2:
-            xk, yk, zk = x1, y1, z1
 
             if xD >= 0:
                 x1 += sx
@@ -460,9 +459,9 @@ def setupLevels():
             lsize = max(sizeX/(2**sf), sizeY/(2**sf), sizeZ/(2**sf))
             lsizeX, lsizeY, lsizeZ = lsize, lsize, lsize
 
-            if lsizeX > sizeX/minclustersize:  lsizeX = sizeX/minclustersize
-            if lsizeY > sizeY/minclustersize:  lsizeY = sizeY/minclustersize
-            if lsizeZ > sizeZ/minclustersize:  lsizeZ = sizeZ/minclustersize
+            if lsizeX > sizeX/gl.minclustersize:  lsizeX = sizeX/gl.minclustersize
+            if lsizeY > sizeY/gl.minclustersize:  lsizeY = sizeY/gl.minclustersize
+            if lsizeZ > sizeZ/gl.minclustersize:  lsizeZ = sizeZ/gl.minclustersize
 
             L[level] = CL(level, int(lsizeX), int(lsizeY), int(lsizeZ))
 
@@ -503,22 +502,23 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
             gl.map_[obsLoc] = -1
             gl.costMatrix[obsLoc] = float('inf')
 
+
     if args:
-        path1 = args[0]
-        path1 = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path1)]
+        path = args[0]
+        path = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path)]
 
 
         # Check line of sight between smoothed spline path
-        if len(path1) > 0:
+        if len(path) > 0:
             # Extract portion within search radius
             path_section = []
             x1,y1,z1 = gl.start
-            x2,y2,z2 = path1[0]
+            x2,y2,z2 = path[0]
             while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= max(refinementDistance,searchRadius):
-                path_section.append(path1.pop(0))
-                if len(path1) < 1:
+                path_section.append(path.pop(0))
+                if len(path) < 1:
                     break
-                x2,y2,z2 = path1[0]
+                x2,y2,z2 = path[0]
 
             #for each node in path_section:
             for idx in xrange(len(path_section)-1):
@@ -526,10 +526,12 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
                     validPath = False
                     break
 
+            del path, path_section
 
     if cellsToUpdate:
-        if safetymargin != 0:
-            markSafetyMargin(cellsToUpdate,safetymargin)
+        markSafetyMargin(cellsToUpdate,safetymargin)
+
+    del cellsToUpdate, searchRange   # free up memory
     return validPath
 
 
@@ -574,11 +576,6 @@ def euclideanDistance(us,ut):
     dx,dy,dz = xs-xt, ys-yt, zs-zt
 
     return sqrt(dx*dx + dy*dy + dz*dz)
-
-
-def initial_memory():
-    # Test memory usage?
-    pass
 
 
 def findPath(L):
@@ -638,7 +635,7 @@ def findPath(L):
     return path
 
 
-def compute_t(ti, p1, p2):
+def parameterValues(ti, p1, p2):
     """
     used to get parametric value t for Catmull-Rom spline
     """
@@ -654,14 +651,14 @@ def CatmullRomPoints(p0, p1, p2, p3, numPts):
     :return: [p1, generated intermediary points, p2]
     """
 
-    # Convert the points to numpy so that we can do array multiplication
+    # Convert points to numpy for array multiplication
     p0, p1, p2, p3 = map(np.array, [p0, p1, p2, p3])
 
     # Calculate t0 to t3
     t0 = 0
-    t1 = compute_t(t0, p0, p1)
-    t2 = compute_t(t1, p1, p2)
-    t3 = compute_t(t2, p2, p3)
+    t1 = parameterValues(t0, p0, p1)
+    t2 = parameterValues(t1, p1, p2)
+    t3 = parameterValues(t2, p2, p3)
 
     if t1==t0:
         t1 = 1e-8
@@ -705,31 +702,7 @@ def CatmullRomSpline(pts):
             c = CatmullRomPoints(pts[i], pts[i+1], pts[i+2], pts[i+3], splinePoints)
             C.extend(c.tolist())
 
-        # Remove duplicate nodes
-        # rowDel = []
-        # for idx in xrange(len(C)-1):
-        #     x1,y1,z1 = C[idx]
-        #     x2,y2,z2 = C[idx+1]
-        #     if (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 <= 1:
-        #         rowDel.append(idx+1)
-        #
-        # for i in sorted(rowDel, reverse=True):
-        #     del C[i]
-
-
-        k, t = 0, [C[0]]
-        for i in xrange(1,len(C)-1):
-            x1,y1,z1 = t[k]
-            x2,y2,z2 = C[i+1]
-        #    if (abs(z1-z2)>0.01 and cZ > 1) or not lineOfSight(t[k],pathArray[i+1]):
-            if (x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2 >= 1:
-                k += 1
-                t.append(C[i])
-
-        k += 1
-        t.append(C[-1])
-
-        return t
+        return C
 
 
 
@@ -819,9 +792,7 @@ class CL:   # Create level
 
     def remove_node(self, u):
         """ Mark an existing node as removed """
-       # entry = CL.entry_finder.pop(u)
         del CL.entry_finder[u]
-      #  entry[-1] = '<removed-task>'
 
 
     def pop_node(self):
@@ -829,7 +800,6 @@ class CL:   # Create level
         while True:
             key1, key2, u = heapq.heappop(CL.U)
             if u in CL.entry_finder:
-                #if u is not '<removed-task>':
                 del CL.entry_finder[u]
                 return key1, key2, u
         raise KeyError('Attempted to pop from an empty priority queue')
@@ -861,7 +831,6 @@ class CL:   # Create level
             dx2, dy2, dz2 = gl.start[0]-ut[0], gl.start[1]-ut[1], gl.start[2]-ut[2]
 
             if max([abs(dx1),abs(dy1),abs(dz1)]) <= searchRadius or max([abs(dx2),abs(dy2),abs(dz2)]) <= searchRadius:
-            #if dx2*dx2 + dy2*dy2 + dz2*dz2 <= searchRadiusSquared or dx1*dx1 + dy1*dy1 + dz1*dz1 <= searchRadiusSquared:
                 if not lineOfSight(us,ut):
                     return float('inf')
 
@@ -952,13 +921,12 @@ class CL:   # Create level
 
     def computeShortestPath(self, waypoints, first_path):
         """
-        Only use for level 0 map. The only difference is the successor function
         :param waypoints: list of points to computeShortestPath for
         (i.e. from waypoint[0] to waypoint [1], from waypoint[1] to waypoint[2],..., from waypoint[n-1] to waypoint[n])
         :return: new set of waypoints to either send to lower level planner, or to smooth and follow
         """
 
-        tic = time.clock()
+
         new_waypoints, startnode, goalnode = [], [], []
         for idx, node in enumerate(waypoints[0:-1]):
             startnode, goalnode = node, waypoints[idx+1]
@@ -966,7 +934,7 @@ class CL:   # Create level
                 raise Exception('In an obstacle')
             self.initialize(startnode, goalnode)
 
-
+            # kOld comparisons generally not used, but do not affect operation
             kOld1, kOld2, u = self.pop_node()
             k1, k2 = self.calcKey(startnode, startnode)
             gl.closed_list += 1
@@ -1024,6 +992,7 @@ class CL:   # Create level
         return new_waypoints
 
 
+# Recusively get size of object
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
 

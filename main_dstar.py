@@ -22,6 +22,11 @@ PROGRAM CONFIGURATION
     creating local copies of constants here
 """
 
+if gl.testingMode:
+    reload(gl)
+    reload(config_program)
+    reload(fcn)
+
 sizeX, sizeY, sizeZ, cX, cY, cZ = gl.sizeX, gl.sizeY, gl.sizeZ, gl.cX, gl.cY, gl.cZ
 
 searchRadius, useMovingGoals = gl.searchRadius, gl.useMovingGoals
@@ -46,13 +51,13 @@ total_cost = 0
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
     xNew, yNew, zNew = gl.start                         # get current location
-    fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
+ #   fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
     while gl.start != gl.goal:
 
         tic1 = time.clock()
         path = L.computeShortestPath([gl.start, gl.goal], False)
         path = fcn.postSmoothPath(path)
-       # path = fcn.CatmullRomSpline(path)
+     #   path = fcn.CatmullRomSpline(path)
         path = fcn.simulateUAVmovement(path)
 
         findPathTime = time.clock() - tic1  # end timer
@@ -114,9 +119,9 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 gl.stepCount += 1
 
                 # Check if there's any obstacles within search radius
-                if not fcn.searchAndUpdate(xNew, yNew, zNew, path):
-                    validPath=False
-                    break
+                # if not fcn.searchAndUpdate(xNew, yNew, zNew, path):
+                #     validPath=False
+                #     break
 
 
 
@@ -146,8 +151,9 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
 
 
-
-print 'Run succeeded!\n'
+if not gl.testingMode:
+    print 'Run succeeded!\n'
+    print 'Total cost: ' + str(total_cost)
 
 # Get averages, in milliseconds
 mean_time_findPath = 1000*sum(time_findPath)/len(time_findPath)

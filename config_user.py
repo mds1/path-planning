@@ -8,9 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 
-testingMode = False
+testingMode = False  # suppresses figure generation, outputs from main*.py are not printed
 
-# Visual Settings
 makeFigure = True
 makeMovie = False
 startWithEmptyMap = True
@@ -18,57 +17,28 @@ makeRandObs = False
 useMovingGoals = False
 restrictVerticalMovement = True
 
-
-
-
-vidname = 'dstarVid'
-fps = 5            # higher = faster playback speed
-dpi = 100           # higher = better quality, slower runtime (300
-imgformat = 'png'   # currently only works for png
-
-
-# Global Cost Scale Factors / Other Settings
-alpha = 0.5
-splinePoints = 5        # Enter 2 to not use splines, otherwise 5 is recommended
-t_max = float('inf')             # Max time to spend on path-finding, in milliseconds. Enter high value to prevent restriction
-
-mapscale = 4
 percentFixedRandomObstacles = 0
 safetymargin = 0
-cX, cY, cZ = 1, 1, 2
+cX, cY, cZ = 1, 1, 2        # cX and cY currently are unused - modify computeCost if desired
 heuristicScale = 1.01
 
 searchRadius = 20
-refinementDistance = math.ceil(searchRadius * 2)
+refinementDistance = math.ceil(searchRadius * 2)    # must be an integer
+t_max = float('inf')             # Max time to spend on path-finding, in milliseconds. Enter inf to prevent restriction
 
-zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
-                                # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
-distancerequirement = 7     # determines cluster size used for coarse paths, shorter = faster, but may have longer paths
-                                # distance >= distancerequirement*maxclusterdimension
-                                # too small and it runs for very long and may not find a path, >=6 recommended
+sizeX = 64
+sizeY = 64
+sizeZ = 64
 
-
-
-
-
-
-# Map Settings
-sizeX = 64 * mapscale
-sizeY = 64 * mapscale
-sizeZ = 64 * mapscale
+mapscale = 4
 start = (3*mapscale , 4*mapscale, 6*mapscale)
-#start = (5*mapscale , 5*mapscale, sizeZ/2*mapscale)
-#goals = np.array([[sizeX-5., sizeY-5., sizeZ/2., 0.]])  * mapscale
 goals = np.array([[62., 60., 6.,    0.]])  * mapscale
-# 0 placeholders are for cantor function
 
 # Configure Moving Goals
 initX = [60, 60]# [12, 6]
 initY = [50, 49]#[3, 2]
 initZ = [6, 6]#[4, 7]
 T = [5, 5]#[5, 2]
-
-
 
 # Fixed Individual Obstacles
 obstacles = []
@@ -87,6 +57,12 @@ rZdim =   [30,  8, 15, 28, 20, 28]
 # rYdim =   []
 # rZdim =   []
 
+vidname = 'dstarVid'
+fps = 5                 # higher = faster playback speed
+dpi = 100               # higher = better quality, slower runtime
+imgformat = 'png'       # currently only works for png
+
+
 
 
 
@@ -98,14 +74,15 @@ maxObs = 50
 maxPercent = 0.05
 seedDyn = np.random.randint(0,1000)
 #seedDyn = np.random.randint(0,10)
-seedDyn = 432
+#seedDyn = 432
 
 
 # Generate Random Fixed Obstacles
 num2gen = int(round(percentFixedRandomObstacles/100 * sizeX*sizeY*sizeZ))
 seedStatic = np.random.random_integers(0,1000)
 #seedStatic = np.random.random_integers(0,10
-seedStatic = 141
+#seedStatic = 141
+
 
 
 
@@ -113,9 +90,53 @@ seedStatic = 141
 """
 ====================================================================================
 ================== Variables below this line are not user inputs ===================
-======== They are here since they're being implemented as global variables =========
+========== They are here for configuration or to create global variables ===========
 ====================================================================================
 """
+
+# if testingEnvironment == '3DF_20':
+#     sizeX, sizeY, sizeZ = 150, 150, 150
+#     start = (75,75,75)
+#     goals = np.array([[150, 150, 150, 0]])
+#     percentFixedRandomObstacles = 20
+#     restrictVerticalMovement = False
+#     cX, cY, cZ = 1, 1, 1
+#     searchRadius = 7
+#     percentFixedRandomObstacles = 20
+#
+# elif testingEnvironment == '3DF_50':
+#     sizeX, sizeY, sizeZ = 150, 150, 150
+#     start = (75,75,75)
+#     goals = np.array([[150, 150, 150, 0]])
+#     percentFixedRandomObstacles = 20
+#     restrictVerticalMovement = False
+#     cX, cY, cZ = 1, 1, 1
+#     searchRadius = 7
+#     percentFixedRandomObstacles = 50
+#
+# elif testingEnvironment == 'city':
+#     sizeX = 64
+#     sizeY = 64
+#     sizeZ = 64
+#     start = (3*mapscale , 4*mapscale, 6*mapscale)
+#     goals = np.array([[62., 60., 6.,    0.]])  * mapscale
+#     percentFixedRandomObstacles = 0
+#
+#     rXstart = [8,  12, 15,  35, 41, 49]
+#     rYstart = [2,  15, 35, 10, 20, 47]
+#     rZstart = [1,  1,  1,  1,  1,  1]
+#     rXdim =   [4,  20, 30, 5,  8,  6]
+#     rYdim =   [9,  12, 8,  5,  8,  6]
+#     rZdim =   [30,  8, 15, 28, 20, 28]
+#
+# elif testingEnvironment == 'random':
+#     sizeX = 150
+#     sizeY = 150
+#     sizeZ = 150
+#     start = (5 , 5, sizeZ/2)
+#     goals = np.array([[sizeX-5., sizeY-5., sizeZ/2., 0.]])
+
+
 
 # Modifying by scale factor
 initX = [mapscale*point for point in initX]
@@ -129,6 +150,9 @@ rXdim = [mapscale*(point) for point in rXdim if point <= sizeX]
 rYdim = [mapscale*(point) for point in rYdim if point <= sizeY]
 rZdim = [mapscale*(point) for point in rZdim if point <= sizeZ]
 
+sizeX *= mapscale
+sizeY *= mapscale
+sizeZ *= mapscale
 
 if testingMode:
     makeFigure = False
@@ -170,7 +194,12 @@ output = {}
 
 
 
-# Deprecated variables
-distBetweenL0Paths = 8      # the max distance in x, y, or z-direction between level 0 path calculations
-                                # shorter = faster on-line computation, but more jagged paths (recommended between 4-16)
-minclustersize = 4  # (still used) dimension of a cluster is this many L0 nodes (4 recommended for shorter paths)
+# Additional variables
+zf1, zf2 = 1, 0             # provides more flexibility over coarse z-movement; zf1 = multiplier, zf2 = added constant
+                                # use (1,0) for default, or (0,x) to set coarse z-successors at a distance of x
+distancerequirement = 7     # used in findPath function. determines cluster size used for coarse paths
+                                # shorter = faster, but may have longer paths
+                                # too small and it may not find a path, so >=6 recommended
+minclustersize = 4          # represents dimension of smallest cluster in terms of L0 nodes
+alpha = 0.5             # use 0.5 for centripetal splines
+splinePoints = 5        # Enter 2 to not use splines, otherwise 5 is recommended
