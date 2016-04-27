@@ -360,6 +360,9 @@ def setupLevels():
 
 def searchAndUpdate(xNew,yNew,zNew,*args):
     """
+    This and searchAndUpdate are the major bottlenecks
+    Modifications to speed them up would be very useful
+
     :param xNew, yNew, zNew: current location of UAV
     :param args: checks node of pathToFollow to ensure they still have line-of-sight
     :return: boolean, whether or not new obstacles exist nearby
@@ -469,6 +472,7 @@ def findPath(L):
     distance = euclideanDistance(gl.start,gl.goal)
     path = [gl.start, gl.goal]
     first_path = True
+
 
     if distance <= distancerequirement*4: # path distance too short
         path = L[0].computeShortestPath(path,False)
@@ -611,7 +615,10 @@ def plotResultingWaypoints(waypoints,color,size,delete):
 
 
 def succ6(s):
-    """ Find which nodes can be moved to next from node s, excluding diagonals"""
+    """
+    Find which nodes can be moved to next from node s, excluding diagonals
+    Used to mark nodes within safety margin since its faster than using all 26 successors
+    """
     x, y, z = s
 
     # Define successor states, one down in z-direction
@@ -651,6 +658,9 @@ def succ6(s):
 
 def markSafetyMargin(cellsToUpdate,sm):
     """
+    This and searchAndUpdate are the major bottlenecks
+    Modifications to speed them up would be very useful
+
     :param cellsToUpdate: list of nodes containing obstacles
     :param sm: safe distance to remain from obstacles
     :return: recursively mark successors of nodes as obstacles until safety margin is met

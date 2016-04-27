@@ -163,7 +163,7 @@ if gl.makeFigure:
 
 
     # Label start and goal nodes
-    gl.ax1.text(1,1,1,'Start',zdir='y')
+  #  gl.ax1.text(1,1,1,'Start',zdir='y')
   #  gl.ax1.text(128,128,1,'Goal',zdir='y')
 
     """

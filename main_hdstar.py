@@ -34,6 +34,9 @@ if makeMovie:   frames = []
 L = fcn.setupLevels()
 time_findPath = []
 total_cost = 0
+final_pathX = [gl.start[0]]
+final_pathY = [gl.start[1]]
+final_pathZ = [gl.start[1]]
 
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
@@ -81,10 +84,14 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                     plt.savefig(fname,dpi=gl.dpi,bbox_inches='tight')
                     frames.append(fname)
                 if gl.makeFigure:
-                    gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA')
+                    gl.ax1.plot([xOld,xNew], [yOld,yNew], [zOld,zNew], linewidth=2, c='#5DA5DA',zorder=0)
 
                 # Update total cost of path
                 total_cost += L[0].computeCost((xOld, yOld, zOld), (xNew, yNew, zNew), False)
+                final_pathX.append(xNew)
+                final_pathY.append(yNew)
+                final_pathZ.append(zNew)
+
 
                 # Generate random obstacles
                 if makeRandObs:
@@ -170,4 +177,9 @@ if makeFigure:
     plt.savefig('dstarFig.pdf',bbox_inches='tight')
     print 'Figure is open. Close figure to end script'
     plt.show()
+
+print final_pathX
+print final_pathY
+print final_pathZ
+
 

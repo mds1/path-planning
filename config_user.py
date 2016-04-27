@@ -58,8 +58,8 @@ rZdim =   [30,  8, 15, 28, 20, 28]
 # rZdim =   []
 
 vidname = 'dstarVid'
-fps = 5                 # higher = faster playback speed
-dpi = 100               # higher = better quality, slower runtime
+fps = 10                 # higher = faster playback speed
+dpi = 500               # higher = better quality, slower runtime
 imgformat = 'png'       # currently only works for png
 
 
