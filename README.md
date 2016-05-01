@@ -4,7 +4,7 @@ Hierarchical D* Lite (HD*) is a real-time path planning algorithm for use in unk
 
 ## How to Use :  
 
-To run HD*, run main_hdstar.py. Run main_dstar.py if you want to use normal D* Lite (this is good for finding the optimal path on a given map). Once either of those functions are run, it imports config_user.py, config_program.py, and all_functions.py
+To run HD\*, run main_hdstar.py. Run main_dstar.py if you want to use normal D\* Lite (this is good for finding the optimal path on a given map). Once either of those functions are run, it imports config_user.py, config_program.py, and all_functions.py
 
 In config_user.py, you can modify the settings that affect oepration. Each variable is explained below.
 - `testingMode`: Suppresses figure generation, outputs from main_hdstar.py (or main_dstar.py) are not printed.
