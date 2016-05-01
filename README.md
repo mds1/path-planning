@@ -4,7 +4,9 @@ Hierarchical D* Lite (HD*) is a real-time path planning algorithm for use in unk
 
 ## How to Use :  
 
-Open config_user.py. This file is where you can modify settings that affect oepration. Each variable is explained below.
+To run HD*, run main_hdstar.py. Run main_dstar.py if you want to use normal D* Lite (this is good for finding the optimal path on a given map). Once either of those functions are run, it imports config_user.py, config_program.py, and all_functions.py
+
+In config_user.py, you can modify the settings that affect oepration. Each variable is explained below.
 - `testingMode`: Suppresses figure generation, outputs from main_hdstar.py (or main_dstar.py) are not printed.
 - `makeFigure`: When `True`, the final path and environment is displayed upon completion.
 - `makeMovie`: When `True`, the figure of then current path and environment is saved after each iteration, and at the end combined to create a movie. 
@@ -36,6 +38,11 @@ Open config_user.py. This file is where you can modify settings that affect oepr
 - `fps`: Frames per second for the video. Higher value results in faster playback but slower runtime.
 - `dpi`: Resolution of each frame of the video. Higher value results in better quality but slower runtime.
 - `imgformat`: Image format for figure. Should be left as `png`.
+
+
+Once imported, config_user.py is imported. This function sets up obstacles, figures, etc. You generally will not need to edit this function, but there a few things you can change here.
+- Under the comment `# Generating random fixed obstacles` is the line `rLoc = fcn.rectObs(newXFixed, newYFixed, newZFixed, 5,5,5)`. The 5,5,5 portion is what configures the fixed random obstacles to be 5x5x5. So modify this line if you want to change those dimensions.
+- Plot setting can be modified under the comment `# Configure plot settings`
 
 ### Files
 main_hdstar.py: 3D Hierarchical D* Lite algorithm  
