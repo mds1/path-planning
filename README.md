@@ -53,14 +53,4 @@ The last imported file is all_functions.py, which contains all the functions nee
 2. The goal moves
 3. The distance travelled since the last replan equals half of the refinement distance
 
-Regardless of which condition occurs, a new path is planned. 
-
-### Files
-main_hdstar.py: 3D Hierarchical D* Lite algorithm  
-main_dstar.py: regular D* Lite algorithm  
-config_user.py: user configures all settings here  
-config_program.py: sets up obstacles, figures, etc.  
-all_function.py: contains all functions needed by the script  
-
-## 
-More details regarding usage to come...
+Regardless of which condition occurs, a new path is planned. The process is repeated until the goal is reached.
