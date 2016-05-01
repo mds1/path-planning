@@ -48,9 +48,11 @@ Once imported, config_user.py is imported. This function sets up obstacles, figu
 - Plot setting can be modified under the comment `# Configure plot settings`
 
 The last imported file is all_functions.py, which contains all the functions needed to run the script. Then the main file, main_hdstar.py, is run. This file plans a path, and the UAV follows it until the path becomes invalidated. The path becomes invalidated when one of three conditions occur:
+
 1. An obstacle blocks the current path
 2. The goal moves
 3. The distance travelled since the last replan equals half of the refinement distance
+
 Regardless of which condition occurs, a new path is planned. 
 
 ### Files
