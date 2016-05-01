@@ -29,6 +29,7 @@ In config_user.py, you can modify the settings that affect oepration. Each varia
 - `mapscale`: Multiples map dimensions and FRO by this value.
 - `start`: Start location of the agent, entered as (x,y,z) coordinates.
 - `goals`: All goals to travel to, where each goal is its own row. Entered as (x,y,z,0), where 0 is a placeholder used when there are moving goals (it stores a unique integer generated from the (x,y,z) values in order keep track of the goals).
+  - When there are multiple goals, the goal location selected is that with the shortest Euclidean distance from the current location.
 - `initX, initY, initZ`: Lists containing intial coordinates of moving goals.
 - `T`: Moving goals will not move every `n` iterations, where `n` is the value entered here. This is to ensure the goals can be caught by the agent.
 - `obstacles`: Enter locations of any FIO as `(x,y,z)`.
@@ -41,8 +42,16 @@ In config_user.py, you can modify the settings that affect oepration. Each varia
 
 
 Once imported, config_user.py is imported. This function sets up obstacles, figures, etc. You generally will not need to edit this function, but there a few things you can change here.
+- Modify the approach used to choose the next goal (when there are multiple goals) beginning at the line where `hyp = []` is declared. Currently, the goal with the shortest Euclidean distance from the start location is used. 
+  - If changing this, you also need to change the section beginning at `if len(gl.goals) > 1:` in main_hdstar.py
 - Under the comment `# Generating random fixed obstacles` is the line `rLoc = fcn.rectObs(newXFixed, newYFixed, newZFixed, 5,5,5)`. The 5,5,5 portion is what configures the fixed random obstacles to be 5x5x5. So modify this line if you want to change those dimensions.
 - Plot setting can be modified under the comment `# Configure plot settings`
+
+The last imported file is all_functions.py, which contains all the functions needed to run the script. Then the main file, main_hdstar.py, is run. This file plans a path, and the UAV follows it until the path becomes invalidated. The path becomes invalidated when one of three conditions occur:
+1. An obstacle blocks the current path
+2. The goal moves
+3. The distance travelled since the last replan equals half of the refinement distance
+Regardless of which condition occurs, a new path is planned. 
 
 ### Files
 main_hdstar.py: 3D Hierarchical D* Lite algorithm  
