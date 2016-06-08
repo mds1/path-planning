@@ -239,6 +239,80 @@ def lineOfSight(*args):
     return True
 
 
+def lineOfSight4SAU(*args):
+    """
+    This function is only called by searchAndUpdate. It checks for new obstacles, where as the other lineOfSight
+    function only checks for known obstacles
+
+    :param us OR x1,y1,z1: source node, given as node number or coordinates
+    :param ut OR x2,y2,z2: target node, given as node number or coordinates
+    :return: boolean, whether or not line of sight exists between the two nodes
+    """
+
+    x1, y1, z1 = args[0]
+    x2, y2 ,z2 = args[1]
+
+    dx, dy, dz = x2 - x1,       y2 - y1,        z2 - z1
+    ax, ay, az = abs(dx)*2,     abs(dy)*2,      abs(dz)*2
+    sx, sy, sz = cmp(dx,0),     cmp(dy,0),      cmp(dz,0)
+
+    if ax >= max(ay,az):
+        yD = ay - ax/2
+        zD = az - ax/2
+
+        while x1 != x2:
+
+            if yD >= 0:
+                y1 += sy
+                yD -= ax
+            if zD >= 0:
+                z1 += sz
+                zD -= ax
+
+            x1 += sx; yD += ay; zD += az
+
+            if gl.map_[(x1,y1,z1)] == - 2 or gl.map_[(x1,y1,z1)] == -1:
+                return False, (x1,y1,z1)
+
+    elif ay >= max(ax,az):
+        xD = ax - ay/2
+        zD = az - ay/2
+
+        while y1 != y2:
+
+            if xD >= 0:
+                x1 += sx
+                xD -= ay
+            if zD >= 0:
+                z1 += sz
+                zD -= ay
+
+            y1 += sy; xD += ax; zD += az
+
+            if gl.map_[(x1,y1,z1)] == - 2 or gl.map_[(x1,y1,z1)] == -1:
+                return False, (x1,y1,z1)
+
+    elif az > max(ax,ay):
+        xD = ax - az/2
+        yD = ay - az/2
+
+        while z1 != z2:
+
+            if xD >= 0:
+                x1 += sx
+                xD -= az
+            if yD >= 0:
+                y1 += sy
+                yD -= az
+
+            z1 += sz; xD += ax; yD += ay
+
+            if gl.map_[(x1,y1,z1)] == - 2 or gl.map_[(x1,y1,z1)] == -1:
+                return False, (x1,y1,z1)
+
+    return True, None
+
+
 def postSmoothPath(pathArray):
         """
         :param pathArray: current path stored as a series of nodes
@@ -360,6 +434,9 @@ def setupLevels():
 
 def searchAndUpdate(xNew,yNew,zNew,*args):
     """
+    New method for faster searching and updating of nodes. Uses line-of-sight checks instead of searching all nodes
+    that are within the bounding search cube (original "searchAndUpdate" function is now called "searchAndUpdate_old")
+
     This and searchAndUpdate are the major bottlenecks
     Modifications to speed them up would be very useful
 
@@ -372,7 +449,7 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     cellappend = cellsToUpdate.append
     validPath = True
 
-    # Generate list of points to search
+    """ Get endpoints of bounding search cube """
     searchRange = []
     sr_append = searchRange.append
     x,y,z = int(round(xNew)), int(round(yNew)), int(round(zNew))
@@ -380,20 +457,31 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
     zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
 
-    # Define search region
-    [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
+    """ Get nodes that make up the 6 faces """
 
-    # Search them
-    for obsLoc in searchRange:
-        if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
-            # -1  = Known obstacle
-            # -2  = Newly detected/undetected obstacle
+    # Face 1: vary x,y at zmin
+    [sr_append((dx,dy,zmin)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1)]
+    # Face 2: vary x,y at zmax
+    [sr_append((dx,dy,zmax)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1)]
+    # Face 3: vary x,z at ymin
+    [sr_append((dx,ymin,dz)) for dx in xrange(xmin, xmax+1) for dz in xrange(zmin, zmax+1)]
+    # Face 4: vary x,z at ymax
+    [sr_append((dx,ymax,dz)) for dx in xrange(xmin, xmax+1) for dz in xrange(zmin, zmax+1)]
+    # Face 5: vary y,z at xmin
+    [sr_append((xmin,dy,dz)) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
+    # Face 6: vary y,z at xmax
+    [sr_append((xmax,dy,dz)) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
 
-            cellappend(obsLoc)      # Marking obstacles within search radius
+    """ Run line-of-sight checks """
+    for node in searchRange:
+        los, blkdNode = lineOfSight4SAU((x,y,z), node)
+        if not los:
+            cellappend(blkdNode)
+            gl.costMatrix[blkdNode] = float('inf')
 
-            gl.map_[obsLoc] = -1
-            gl.costMatrix[obsLoc] = float('inf')
-
+    if cellsToUpdate:
+        markSafetyMargin(cellsToUpdate,safetymargin)
+    del cellsToUpdate, searchRange   # free up memory
 
     if args:
         path = args[0]
@@ -419,10 +507,75 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
 
             del path, path_section  # free up memory
 
+    return validPath
+
+
+
+def searchAndUpdate_old(xNew,yNew,zNew,*args):
+    """
+    This function is no longer used but is left for posterity
+    It has been replaced by the more realistic and efficient "searchAndUpdate"
+
+    :param xNew, yNew, zNew: current location of UAV
+    :param args: checks node of pathToFollow to ensure they still have line-of-sight
+    :return: boolean, whether or not new obstacles exist nearby
+    """
+
+    cellsToUpdate = []
+    cellappend = cellsToUpdate.append
+    validPath = True
+
+    # Generate list of points to search
+    searchRange = []
+    sr_append = searchRange.append
+    x,y,z = int(round(xNew)), int(round(yNew)), int(round(zNew))
+    xmin, xmax = max(x-sr, 1), min(x+sr, sizeX)
+    ymin, ymax = max(y-sr, 1), min(y+sr, sizeY)
+    zmin, zmax = max(z-sr, 1), min(z+sr, sizeZ)
+
+    [sr_append((dx,dy,dz)) for dx in xrange(xmin, xmax+1) for dy in xrange(ymin, ymax+1) for dz in xrange(zmin, zmax+1)]
+
+    # Search them
+    for obsLoc in searchRange:
+        if gl.map_[obsLoc] == - 2 or gl.map_[obsLoc] == -1:
+            # -1  = Known obstacle
+            # -2  = Newly detected/undetected obstacle
+
+            cellappend(obsLoc)      # Marking obstacles within search radius
+
+            gl.map_[obsLoc] = -1
+            gl.costMatrix[obsLoc] = float('inf')
+
     if cellsToUpdate:
         markSafetyMargin(cellsToUpdate,safetymargin)
 
     del cellsToUpdate, searchRange   # free up memory
+
+    if args:
+        path = args[0]
+        path = [(round(pt[0]), round(pt[1]), round(pt[2])) for pt in reversed(path)]
+
+        # Check line of sight between nodes in path
+        if len(path) > 0:
+            # Extract portion within search radius
+            path_section = []
+            x1,y1,z1 = gl.start
+            x2,y2,z2 = path[0]
+            while max([abs(x1-x2), abs(y1-y2), abs(z1-z2)]) <= max(refinementDistance,searchRadius):
+                path_section.append(path.pop(0))
+                if len(path) < 1:
+                    break
+                x2,y2,z2 = path[0]
+
+            # For each node in path_section:
+            for idx in xrange(len(path_section)-1):
+                if not lineOfSight(path_section[idx],path_section[idx+1]):
+                    validPath = False
+                    break
+
+            del path, path_section  # free up memory
+
+
     return validPath
 
 

@@ -38,6 +38,7 @@ final_pathX = [gl.start[0]]
 final_pathY = [gl.start[1]]
 final_pathZ = [gl.start[1]]
 
+tic1 = time.time()
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
     xNew, yNew, zNew = gl.start                         # get current location
@@ -147,9 +148,9 @@ def hdstar_outputs():
 
 if not gl.testingMode:
     print 'Run succeeded!\n'
-    print 'Elapsed time: ' + str(time.time() - tic) + ' seconds'
+    print 'Elapsed time: ' + str(time.time() - tic1) + ' seconds'
     print 'Total cost: ' + str(total_cost)
-    print 'Path-finding Time: ' + str(mean_time_findPath)
+    print 'Mean Path-finding Time: ' + str(mean_time_findPath) + ' ms'
     print 'Expanded nodes: ' + str(gl.closed_list)
 
 
@@ -178,8 +179,9 @@ if makeFigure:
     print 'Figure is open. Close figure to end script'
     plt.show()
 
+"""
 print final_pathX
 print final_pathY
 print final_pathZ
-
+"""
 

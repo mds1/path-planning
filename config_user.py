@@ -18,12 +18,12 @@ useMovingGoals = False
 restrictVerticalMovement = True
 
 percentFixedRandomObstacles = 0
-safetymargin = 0
+safetymargin = 5
 cX, cY, cZ = 1, 1, 2        # cX and cY currently are unused - modify computeCost if desired
 heuristicScale = 1.01
 
 searchRadius = 20
-refinementDistance = math.ceil(searchRadius * 2)    # must be an integer
+refinementDistance = math.ceil(searchRadius * 1)    # must be an integer
 t_max = float('inf')             # Max time to spend on path-finding, in milliseconds. Enter inf to prevent restriction
 
 sizeX = 64
@@ -31,8 +31,8 @@ sizeY = 64
 sizeZ = 64
 
 mapscale = 4
-start = (3*mapscale , 4*mapscale, 6*mapscale)
-goals = np.array([[62., 60., 6.,    0.]])  * mapscale
+start = (3*mapscale , 3*mapscale, 6*mapscale)
+goals = np.array([[62., 62., 6.,    0.]])  * mapscale
 
 # Configure Moving Goals
 initX = [60, 60]# [12, 6]
