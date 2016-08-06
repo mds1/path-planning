@@ -12,13 +12,14 @@ testingMode = False             # suppresses figure generation, outputs from mai
 
 makeFigure = True
 makeMovie = False
-startWithEmptyMap = True
+startWithEmptyMap = False
 makeRandObs = False
 useMovingGoals = False
 restrictVerticalMovement = True
+useHierarchicalPlanning = False
 
 percentFixedRandomObstacles = 0
-safetymargin = 5
+safetymargin = 1
 cX, cY, cZ = 1, 1, 2        # cX and cY currently are unused - modify computeCost if desired
 heuristicScale = 1.01
 
@@ -30,7 +31,7 @@ sizeX = 64
 sizeY = 64
 sizeZ = 64
 
-mapscale = 4
+mapscale = 2
 start = (3*mapscale , 3*mapscale, 6*mapscale)
 goals = np.array([[62., 62., 6.,    0.]])  * mapscale
 
@@ -173,8 +174,11 @@ number_of_obstacles = 0    # for genRandObs function
 numNodes = sizeX*sizeY*sizeZ
 goalMoved = False
 numlevels = 0
-# For marking priority queue elements removed
-removed = '<removed-task>'
+
+
+# Set up initial heading angles to factor in direction of travel
+oldstart = None
+
 
 # Set up UAV map and plot
 map_ = collections.defaultdict(lambda : 0)

@@ -1,7 +1,7 @@
 from __future__ import division, print_function
 import heapq
 import time
-from math import sqrt, ceil, floor, isinf
+from math import sqrt, ceil, floor, isinf, pi, isnan
 import random
 import itertools
 import collections
@@ -37,7 +37,7 @@ safetymargin = gl.safetymargin
 alpha, splinePoints = gl.alpha, gl.splinePoints
 pathComputationLimit = gl.t_max / 1000          # convert to seconds
 zf1, zf2 = gl.zf1, gl.zf2
-
+#maxTurnAngle = gl.maxTurnAngle
 
 
 
@@ -437,7 +437,7 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     New method for faster searching and updating of nodes. Uses line-of-sight checks instead of searching all nodes
     that are within the bounding search cube (original "searchAndUpdate" function is now called "searchAndUpdate_old")
 
-    This and searchAndUpdate are the major bottlenecks
+    This and markSafetyMargin are the major bottlenecks
     Modifications to speed them up would be very useful
 
     :param xNew, yNew, zNew: current location of UAV
@@ -510,7 +510,6 @@ def searchAndUpdate(xNew,yNew,zNew,*args):
     return validPath
 
 
-
 def searchAndUpdate_old(xNew,yNew,zNew,*args):
     """
     This function is no longer used but is left for posterity
@@ -574,7 +573,6 @@ def searchAndUpdate_old(xNew,yNew,zNew,*args):
                     break
 
             del path, path_section  # free up memory
-
 
     return validPath
 
@@ -811,8 +809,49 @@ def succ6(s):
 
 def markSafetyMargin(cellsToUpdate,sm):
     """
+    New method for marking nodes within the safety margin, a bit faster than the old one
+
     This and searchAndUpdate are the major bottlenecks
     Modifications to speed them up would be very useful
+
+    :param cellsToUpdate: list of nodes containing obstacles
+    :param sm: safe distance to remain from obstacles
+    :return: recursively mark successors of nodes as obstacles until safety margin is met
+    """
+
+    if sm == 0:
+        return
+    else:
+        # First, get a list of the immediate successors
+        allsucc = set()
+        asa = allsucc.update
+
+        for node in cellsToUpdate:
+            succS = succ6(node)
+            asa(succS)
+
+        # Now repeat for remaining successors
+        if sm > 1:
+            for i in xrange(sm-1):
+                cellsToAdd = []
+                ce = cellsToAdd.extend
+                for node in allsucc:
+                    succS = succ6(node)
+                    ce(succS)
+
+                allsucc.update(cellsToAdd)
+
+        for node in list(allsucc):
+            #gl.map_[node] = -1
+            gl.costMatrix[node] = float('inf')
+
+        del allsucc
+
+
+def markSafetyMargin_old(cellsToUpdate,sm):
+    """
+    This function is no longer used but is left for posterity
+    It has been replaced by the more realistic and efficient "markSafetyMargin"
 
     :param cellsToUpdate: list of nodes containing obstacles
     :param sm: safe distance to remain from obstacles
@@ -955,6 +994,13 @@ class CL:   # Create level
         else:
             sf = 1
 
+        # try:
+        #     if turnAngle(ut,us,CL.bptr[us]) != 0:
+        #         return sf * sqrt(dx*dx + dy*dy + dz*dz) + 0.5
+        #     else:
+        #         return sf * sqrt(dx*dx + dy*dy + dz*dz)
+        # except KeyError:
+        #     return sf * sqrt(dx*dx + dy*dy + dz*dz)
         return sf * sqrt(dx*dx + dy*dy + dz*dz)
 
 
@@ -1029,6 +1075,9 @@ class CL:   # Create level
         if max(dx,dy,dz) < 2*self.maxlength:
             succNode.append(startnode)
 
+        # succNode2 = [node for node in succNode if turnAngle(node,startnode,gl.oldstart) <= maxTurnAngle+1e-6]
+        # print(turnAngle(node,startnode,gl.oldstart)*180/pi)
+        # return succNode2
         return succNode
 
 
@@ -1039,21 +1088,22 @@ class CL:   # Create level
         :return: new set of waypoints to either send to lower level planner, or to smooth and follow
         """
 
-
         new_waypoints, startnode, goalnode = [], [], []
+
         for idx, node in enumerate(waypoints[0:-1]):
             startnode, goalnode = node, waypoints[idx+1]
+
             if isinf(gl.costMatrix[startnode]):
                 raise Exception('In an obstacle')
+
             self.initialize(startnode, goalnode)
 
             # kOld comparisons generally not used, but do not affect operation
             kOld1, kOld2, u = self.pop_node()
             k1, k2 = self.calcKey(startnode, startnode)
-            gl.closed_list += 1
+            gl.closed_list += 1     # counting number of nodes expanded
 
             while kOld1 < k1 or (kOld1 == k1 and kOld2 < k2) or CL.rhs[startnode] > CL.g[startnode]:
-
 
                 kNew1,kNew2 = self.calcKey(u, startnode)
                 if kOld1 < kNew1 or (kOld1 == kNew1 and kOld2 < kNew2):
@@ -1092,20 +1142,20 @@ class CL:   # Create level
                 k1, k2 = self.calcKey(startnode, startnode)
                 gl.closed_list += 1
 
-
             if isinf(gl.costMatrix[CL.rhs[startnode]]):
                 raise Exception('No path exists')
 
             nextpos = [startnode]
             while nextpos[-1] != goalnode:
                 nextpos.append(CL.bptr[nextpos[-1]])
-            new_waypoints.extend(nextpos[0:-1])
-        new_waypoints.append(goalnode)
 
+            new_waypoints.extend(nextpos[0:-1])
+
+        new_waypoints.append(goalnode)
         return new_waypoints
 
 
-# Recusively get size of an object
+# Recursively get size of an object
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
 
@@ -1116,7 +1166,7 @@ def total_size(o, handlers={}, verbose=False):
         handlers = {SomeContainerClass: iter,
                     OtherContainerClass: OtherContainerClass.get_elements}
 
-    Source: http://code.activestate.com/recipes/577504/ (this link was in python3 documentation)
+    Source: http://code.activestate.com/recipes/577504/ (this link was found in the Python3 documentation)
     """
 
     dict_handler = lambda d: chain.from_iterable(d.items())

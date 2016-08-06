@@ -108,9 +108,6 @@ if gl.makeFigure:
 
 # Plot rectangular obstacles and them to obstacles array
 for i in xrange(0,len(rXstart)):
-    # if i == 2:  # skip this obstacle for now
-    #     continue
-
     # Define each pair of x,y,z coordinates. Each column is a vertex
     if gl.makeFigure:
         fcn.plotRectObs(rXstart[i], rYstart[i], rZstart[i], rXdim[i], rYdim[i], rZdim[i], 0.2, gl.ax1)
@@ -119,19 +116,19 @@ for i in xrange(0,len(rXstart)):
 
     gl.obstacles.extend(rLoc)
 
-
 gl.number_of_obstacles = len(gl.obstacles)
 
 
 # Update cost matrix if needed
 for obsLoc in gl.obstacles:
-    #obsLoc = (obs[0], obs[1], obs[2])
     if gl.startWithEmptyMap:
         gl.map_[obsLoc] = -2                     # mark as undetected obstacle
     elif not gl.startWithEmptyMap:
         gl.map_[obsLoc] = -1                     # mark as known obstacle
         gl.costMatrix[obsLoc] = float('inf')
-        fcn.markSafetyMargin(obsLoc,gl.safetymargin)
+
+        if gl.safetymargin > 0:
+            fcn.markSafetyMargin([obsLoc],gl.safetymargin)
 
     else:
         raise ValueError('\'startWithEmptymap\' must be equal to True or False')
@@ -159,12 +156,10 @@ if gl.makeFigure:
     gl.ax1.xaxis.set_ticklabels([])
     gl.ax1.yaxis.set_ticklabels([])
 
-
-
-
     # Label start and goal nodes
   #  gl.ax1.text(1,1,1,'Start',zdir='y')
   #  gl.ax1.text(128,128,1,'Goal',zdir='y')
+
 
     """
     Scaling for plot is done from here...
@@ -186,8 +181,11 @@ if gl.makeFigure:
     """
 
 # Determine number of levels
-gl.numlevels = 1 # at least the one original level and one abstract level
-maxdim = max(sizeX, sizeY, sizeZ)
-while maxdim > gl.minclustersize:
-    maxdim /= 4
-    gl.numlevels += 1
+if gl.useHierarchicalPlanning:
+    gl.numlevels = 1 # at least the one original level and one abstract level
+    maxdim = max(sizeX, sizeY, sizeZ)
+    while maxdim > gl.minclustersize:
+        maxdim /= 4
+        gl.numlevels += 1
+elif not gl.useHierarchicalPlanning:
+    gl.numlevels = 1

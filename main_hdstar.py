@@ -4,7 +4,7 @@ import os
 import subprocess
 import multiprocessing
 import resource
-from math import isinf, sqrt
+from math import isinf, sqrt, pi
 import numpy as np
 import matplotlib.pyplot as plt
 import config_user as gl
@@ -36,7 +36,7 @@ time_findPath = []
 total_cost = 0
 final_pathX = [gl.start[0]]
 final_pathY = [gl.start[1]]
-final_pathZ = [gl.start[1]]
+final_pathZ = [gl.start[2]]
 
 tic1 = time.time()
 """ Begin main algorithm """
@@ -51,7 +51,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
         path = fcn.findPath(L)
         path = fcn.postSmoothPath(path)
-        path = fcn.CatmullRomSpline(path)
+    #    path = fcn.CatmullRomSpline(path)
         path = fcn.simulateUAVmovement(path)
 
         findPathTime = time.clock() - tic   # end timer
@@ -72,7 +72,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 # Save current position, then move to next point
                 xOld, yOld, zOld = xNew, yNew, zNew
                 xNew, yNew, zNew = path.pop()
-                oldstart = gl.start
+                gl.oldstart = gl.start
                 gl.start = (round(xNew), round(yNew), round(zNew))   # update start coordinate
 
                 # Update distance from start
@@ -89,6 +89,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
                 # Update total cost of path
                 total_cost += L[0].computeCost((xOld, yOld, zOld), (xNew, yNew, zNew), False)
+
                 final_pathX.append(xNew)
                 final_pathY.append(yNew)
                 final_pathZ.append(zNew)
@@ -106,7 +107,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
                 gl.stepCount += 1
 
                 # Check if there's any obstacles within search radius if we've moved to a different node
-                if oldstart != gl.start and not fcn.searchAndUpdate(xNew, yNew, zNew, path):
+                if gl.oldstart != gl.start and not fcn.searchAndUpdate(xNew, yNew, zNew, path):
                     validPath=False
                     break
 
@@ -179,9 +180,9 @@ if makeFigure:
     print 'Figure is open. Close figure to end script'
     plt.show()
 
-"""
+
 print final_pathX
 print final_pathY
 print final_pathZ
-"""
+
 
