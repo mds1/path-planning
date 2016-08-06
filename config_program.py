@@ -188,4 +188,4 @@ if gl.useHierarchicalPlanning:
         maxdim /= 4
         gl.numlevels += 1
 elif not gl.useHierarchicalPlanning:
-    gl.numlevels = 1
+    gl.numlevels = gl.numHierLevels

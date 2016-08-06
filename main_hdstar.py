@@ -51,7 +51,7 @@ for idx in xrange(0, gl.numGoals):                      # for each goal
 
         path = fcn.findPath(L)
         path = fcn.postSmoothPath(path)
-    #    path = fcn.CatmullRomSpline(path)
+        path = fcn.CatmullRomSpline(path)
         path = fcn.simulateUAVmovement(path)
 
         findPathTime = time.clock() - tic   # end timer

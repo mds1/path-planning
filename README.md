@@ -17,6 +17,8 @@ In config_user.py, you can modify the settings that affect oepration. Each varia
   - `seedDyn`: If desired, seed the random number generator used to generated random obstacles at each iteration.
 - `useMovingGoals`: Set to `True` to simulate moving goals. The current configuration of the moving goals function, `movingGoal`, moves the goal randomly, but this can be modified if desired.
 - `restrictVerticalMovement`: Set to `True` if the agent cannot travel vertically. This setting prevents vertical successor nodes from being considered.
+- `useHierarchicalPlanning`: Set to `False` if you do not want to use the default hierarchical planning approach. This is useful if you have a known map, or just want more flexibility of the number of hierarchical levels used. Used in conjunction with `numHierLevels`.
+- `numHierLevels`: use this when `useHierarchicalPlanning` is False to allow control over the tradeoff between path length and run time. A value of 0 will use no hierarchical levels and find the shortest path (for the given heuristic), while a value of 1 will reduce run time at the expense of path cost. A value of 2 will further reduce run time at the expense of path length, and so on.
 - `percentFixedRandomObstacles`: Set the percentage of the map to initially cover in randomly generated FIO which are of size 5x5x5.
   - `seedStatic`: If desired, seed the random number generator used to create the initial fixed obstacles.
 - `safetyMargin`: Prevents the agent from traveling within `n` nodes of obstacles, where `n` is the value entered here. Works by extending the footprint of obstacles by `n` nodes in each direction.

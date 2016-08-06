@@ -12,11 +12,13 @@ testingMode = False             # suppresses figure generation, outputs from mai
 
 makeFigure = True
 makeMovie = False
-startWithEmptyMap = False
+startWithEmptyMap = True
 makeRandObs = False
 useMovingGoals = False
 restrictVerticalMovement = True
-useHierarchicalPlanning = False
+useHierarchicalPlanning = True
+numHierLevels = 0
+
 
 percentFixedRandomObstacles = 0
 safetymargin = 1
