@@ -43,7 +43,7 @@ In config_user.py, you can modify the settings that affect oepration. Each varia
 - `imgformat`: Image format for figure. Should be left as `png`.
 
 
-Once imported, config_user.py is imported. This function sets up obstacles, figures, etc. You generally will not need to edit this function, but there a few things you can change here.
+Worth noting is the default approach is to create splines to smooth out the straight line paths to generate more realistic paths. If the splines are not desired, the can be turned off by commenting out `path = fcn.CatmullRomSpline(path)` in main_hdstar.py. When main_hdstar.py is ran, config_user.py is imported. This function sets up obstacles, figures, etc. You generally will not need to edit this function, but there a few things you can change here.
 - Modify the approach used to choose the next goal (when there are multiple goals) beginning at the line where `hyp = []` is declared. Currently, the goal with the shortest Euclidean distance from the start location is used. 
   - If changing this, you also need to change the section beginning at `if len(gl.goals) > 1:` in main_hdstar.py
 - Under the comment `# Generating random fixed obstacles` is the line `rLoc = fcn.rectObs(newXFixed, newYFixed, newZFixed, 5,5,5)`. The 5,5,5 portion is what configures the fixed random obstacles to be 5x5x5. So modify this line if you want to change those dimensions.
