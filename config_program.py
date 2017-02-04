@@ -12,8 +12,6 @@ sizeX, sizeY, sizeZ, zMove = gl.sizeX, gl.sizeY, gl.sizeZ, gl.sizeX * gl.sizeY
 rXstart, rYstart, rZstart, rXdim, rYdim, rZdim = gl.rXstart, gl.rYstart, gl.rZstart, gl.rXdim, gl.rYdim, gl.rZdim
 
 
-
-
 # Add moving goals to goals array
 if gl.initX:
     newgoals = np.zeros((len(gl.initX), 4))
@@ -25,7 +23,7 @@ if gl.initX:
 
 gl.numGoals = gl.goals.shape[0]
 
-
+# First goal is that with shortest Euclidean distance
 hyp = []
 for i in xrange(0, gl.numGoals):
     gX, gY, gZ = gl.goals[i, 0], gl.goals[i, 1], gl.goals[i, 2]
@@ -48,7 +46,6 @@ for i in xrange(0, gl.numGoals):
     gl.goals[i, 3] = fcn.cantor(gX, gY, gZ)
 
 gl.goal = (gl.goals[goalindex,0], gl.goals[goalindex,1], gl.goals[goalindex,2])
-
 
 
 # Generating random fixed obstacles

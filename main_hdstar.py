@@ -31,7 +31,7 @@ if makeMovie:   frames = []
 
 
 """ Setup abstract levels and variables for performance testing """
-L = fcn.setupLevels()
+#L = fcn.setupLevels()
 time_findPath = []
 total_cost = 0
 final_pathX = [gl.start[0]]
@@ -41,6 +41,7 @@ final_pathZ = [gl.start[2]]
 tic1 = time.time()
 """ Begin main algorithm """
 for idx in xrange(0, gl.numGoals):                      # for each goal
+    L = fcn.setupLevels()
     xNew, yNew, zNew = gl.start                         # get current location
     fcn.searchAndUpdate(xNew,yNew,zNew)                 # search for obstacles
 

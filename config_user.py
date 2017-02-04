@@ -9,12 +9,11 @@ from mpl_toolkits.mplot3d import Axes3D
 
 testingMode = False             # suppresses figure generation, outputs from main*.py are not printed
 
-
 makeFigure = True
 makeMovie = False
 startWithEmptyMap = True
 makeRandObs = False
-useMovingGoals = False
+useMovingGoals = True
 restrictVerticalMovement = True
 useHierarchicalPlanning = True
 numHierLevels = 0
@@ -34,14 +33,14 @@ sizeY = 64
 sizeZ = 64
 
 mapscale = 2
-start = (3*mapscale , 3*mapscale, 6*mapscale)
-goals = np.array([[62., 62., 6.,    0.]])  * mapscale
+start = (3*mapscale , 3*mapscale, 6*mapscale) # start coordinates
+goals = np.array([[62., 62., 6.,    0.]])  * mapscale # goal coordinates
 
 # Configure Moving Goals
-initX = [60, 60]# [12, 6]
-initY = [50, 49]#[3, 2]
+initX = [60, 20]# [12, 6]
+initY = [50, 50]#[3, 2]
 initZ = [6, 6]#[4, 7]
-T = [5, 5]#[5, 2]
+T = [5, 4]#[5, 2]
 
 # Fixed Individual Obstacles
 obstacles = []
@@ -50,21 +49,20 @@ obstacles = []
 rXstart = [8,  12, 15,  35, 41, 49]
 rYstart = [2,  15, 35, 10, 20, 47]
 rZstart = [1,  1,  1,  1,  1,  1]
-rXdim =   [4,  20, 30, 5,  8,  6]
-rYdim =   [9,  12, 8,  5,  8,  6]
-rZdim =   [30,  8, 15, 28, 20, 28]
+rXdim   = [4,  20, 30, 5,  8,  6]
+rYdim   = [9,  12, 8,  5,  8,  6]
+rZdim   = [30,  8, 15, 28, 20, 28]
 # rXstart = []
 # rYstart = []
 # rZstart = []
-# rXdim =   []
-# rYdim =   []
-# rZdim =   []
+# rXdim   = []
+# rYdim   = []
+# rZdim   = []
 
 vidname = 'dstarVid'
 fps = 10                 # higher = faster playback speed
 dpi = 500               # higher = better quality, slower runtime
 imgformat = 'png'       # currently only works for png
-
 
 
 # Generate Random Dynamic Obstacles
@@ -85,13 +83,13 @@ seedStatic = np.random.random_integers(0,1000)
 #seedStatic = 141
 
 
-
-
-
 """
 ====================================================================================
 ================== Variables below this line are not user inputs ===================
-========== They are here for configuration or to create global variables ===========
+============== They are here for configuration or to create variables ==============
+====================================================================================
+============== The " # Additional variables " block at the very bottom =============
+============== is the exception to this and may be modified if desired =============
 ====================================================================================
 """
 
@@ -157,7 +155,7 @@ sizeZ *= mapscale
 
 if testingMode:
     makeFigure = False
-    makeMove = False
+    makeMovie = False
 
 if makeMovie:
     makeFigure = True

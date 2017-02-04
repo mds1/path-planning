@@ -393,6 +393,13 @@ def movingGoal(initX, initY, initZ, T):
 
         random.seed(q+3)
         mgs = random.choice(succ(mgs_old))                                  # pick random successor to move to
+        newseed = q + 4
+        while mgs in gl.obstacles:
+            # pick another random successor if we end up in an obstacle
+            random.seed(newseed)
+            mgs = random.choice(succ(mgs_old))
+            newseed += 1
+
         mgx, mgy, mgz = mgs                                                 # get coordinates of that location
         gl.goals[idx, 0:3] = mgx, mgy, mgz                                  # update location of node in goals array
 
@@ -1093,8 +1100,9 @@ class CL:   # Create level
         for idx, node in enumerate(waypoints[0:-1]):
             startnode, goalnode = node, waypoints[idx+1]
 
-            if isinf(gl.costMatrix[startnode]):
-                raise Exception('In an obstacle')
+            #if isinf(gl.costMatrix[startnode]):
+            # if startnode in gl.obstacles:
+            #     raise Exception('In an obstacle')
 
             self.initialize(startnode, goalnode)
 
