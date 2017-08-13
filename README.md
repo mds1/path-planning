@@ -1,15 +1,17 @@
-# Path Planning
+# Hierarchical D* Lite
 
-Hierarchical D* Lite (HD*) is a real-time path planning algorithm for use in unknown environments. It first plans a coarse path, then refines it to improve path quality.
+Hierarchical D* Lite (HD*) is a real-time path planning algorithm for use in unknown environments. It first plans a coarse path, then refines it to improve path quality. This algorithm was developed by Matt Solomon under Dr. Huan Xu at the University of Maryland.
 
-## How to Use :  
+## Getting Started
 
-To run HD\*, run main_hdstar.py. Run main_dstar.py if you want to use normal D\* Lite (this is good for finding the optimal path on a given map). Once either of those functions are run, it imports config_user.py, config_program.py, and all_functions.py
+To run HD\*, run main_hdstar.py. Alternativel, run main_dstar.py if you want to use normal D\* Lite (this is good for finding the optimal path on a given map). Be sure that you are using Python 2.
+
+## User Settings
 
 In config_user.py, you can modify the settings that affect oepration. Each variable is explained below.
 - `testingMode`: Suppresses figure generation, outputs from main_hdstar.py (or main_dstar.py) are not printed.
 - `makeFigure`: When `True`, the final path and environment is displayed upon completion.
-- `makeMovie`: When `True`, the figure of then current path and environment is saved after each iteration, and at the end combined to create a movie. 
+- `makeMovie`: When `True`, the figure of then current path and environment is saved after each iteration, and at the end combined to create a movie.
 - `startWithEmptyMap`: When `True`, the agent (UAV) has no initial knowledge of the environment. When `False`, the agent is aware of the random fixed individual obstacles (FIO) and fixed rectangular obstacles (FRO). Obstacle configuration is explained more later.
 - `makeRandObs`: When `True`, additional random obstacles are generated during each iteration.
   - `minObs, maxObs`: Upper and lower bounds on the number of random obstacles generated during each iteration.
@@ -44,7 +46,7 @@ In config_user.py, you can modify the settings that affect oepration. Each varia
 
 
 Worth noting is the default approach is to create splines to smooth out the straight line paths to generate more realistic paths. If the splines are not desired, the can be turned off by commenting out `path = fcn.CatmullRomSpline(path)` in main_hdstar.py. When main_hdstar.py is ran, config_user.py is imported. This function sets up obstacles, figures, etc. You generally will not need to edit this function, but there a few things you can change here.
-- Modify the approach used to choose the next goal (when there are multiple goals) beginning at the line where `hyp = []` is declared. Currently, the goal with the shortest Euclidean distance from the start location is used. 
+- Modify the approach used to choose the next goal (when there are multiple goals) beginning at the line where `hyp = []` is declared. Currently, the goal with the shortest Euclidean distance from the start location is used.
   - If changing this, you also need to change the section beginning at `if len(gl.goals) > 1:` in main_hdstar.py
 - Under the comment `# Generating random fixed obstacles` is the line `rLoc = fcn.rectObs(newXFixed, newYFixed, newZFixed, 5,5,5)`. The 5,5,5 portion is what configures the fixed random obstacles to be 5x5x5. So modify this line if you want to change those dimensions.
 - Plot setting can be modified under the comment `# Configure plot settings`
@@ -56,3 +58,8 @@ The last imported file is all_functions.py, which contains all the functions nee
 3. The distance travelled since the last replan equals half of the refinement distance
 
 Regardless of which condition occurs, a new path is planned. The process is repeated until the goal is reached.
+
+## Authors
+
+* **Matt Solomon** - *Algorithm design and main developer* - [Github](https://github.com/mds1)
+
