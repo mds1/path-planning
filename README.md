@@ -62,4 +62,3 @@ Regardless of which condition occurs, a new path is planned. The process is repe
 ## Authors
 
 * **Matt Solomon** - *Algorithm designer and main developer* - [Github](https://github.com/mds1)
-
