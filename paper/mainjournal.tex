@@ -1,5 +1,11 @@
 \documentclass{AIAA}
 
+\usepackage{algorithm}				% to type pseudocode
+\usepackage[noend]{algpseudocode}	% to type pseudocode
+\usepackage{setspace}  				% for changing spacing of pseudocode lines
+\usepackage{bm}					% bold in math mode
+\usepackage{varwidth}				% for indented pseudocode
+
 \begin{document}
 
 \title{Hierarchical D* Lite: A Real-Time 3D Path Planning Algorithm for Unknown Environments}
@@ -112,107 +118,106 @@ Before continuing with this section, it is recommended that the reader be famili
 
 % The heuristic based A* algorithm will first be described, followed by an explanation of the incremental planner D* Lite. Lastly, the principles behind HPA* are covered. Modifications have been made to these algorithms to make them suitable for unknown 3D environments, and those changes will be presented in Section~\ref{sec:implementation}.
 
-\subsection{HD* Algorithm}
-\textit{Add HD* algorithm, details, and pseudocode here, and remove the A*, D* Lite, and HPA* subsections}
-
-\subsubsection{A* Algorithm}
-\label{sec:astar}
-
-Until the development of A*, there was no central theory used to guide the search of a minimum cost path. Methods used to find shortest paths did not consider computational practicality and required every node of the map to be searched. The methods that did consider performance used domain specific knowledge to reduce the number of nodes searched, but were unable to find the shortest path. A* combines these two approaches, resulting in a complete and optimal algorithm that does not need to search the entire map~\cite{astar}.
-
-A* works by keeping track of four different values for every node \(s \in\ S\). These values are:
-
-\begin{enumerate}
-    \item the g-value, \(g(s)\), which is an estimate of the cost from the start node to node \(s\). This cost is denoted \(c(s_{start},s)\). The g-values are initialized to infinity; 
-    \item the heuristic, \(h(s,s_{goal})\), is an estimate of \(c(s,s_{goal})\) provided by the user; %The heuristic must be admissible, meaning it never overestimates the true cost. It must also be consistent, which is true if and only if it obeys the triangle inequality \(h(s,s'') \leq h(s,s') + h(s',s'')\). An admissible heuristic is required to guarantee the shortest path is found;
-        \item the f-value, which is an estimate of the smallest cost of moving from \(s\) to the goal state;% and is defined as \(f(s) = g(s) + h(s,s_{goal})\);
-        \item the backpointer of a node, given by \(bptr(s) \in succ(s)\), points to the parent node of \(s\), where \(succ(s)\) represents all the successors of a given node. It is computed by % using~(\ref{e:backpointer})
-    %\item the backpointer of a node, given by \(bptr(s) \in succ(s)\), points to the parent node of \(s\), where \(succ(s)\) represents all the successors of a given node. The backpointer is used to extract the shortest path once the search is complete. It is initialized to \(NULL\) when \(s\) is first encountered, and is computed using~(\ref{e:backpointer})
-\end{enumerate}
-\begin{equation}
-\label{e:backpointer}
-	bptr(s) =  \left\{
-\begin{array}{ll}
-      NULL & \;\textrm{if } s=s_{goal} \\
-      \textrm{argmin}_{s' \in succ(s)}(g(s')+c(s',s)) & \;\textrm{otherwise}. \\
-\end{array}
-\right.
-\end{equation}
 
 
-The open set \(U\) is a priority queue sorted by f-values, and the node with the minimum f-value is expanded next. Initially, it only contains $s_{start}$. Expansion of node $s$ occurs when each successor of $s$ is operated on in order to determine their f-values. A* also maintains a closed list, which is a list of all nodes that have already been expanded. The algorithm operates by removing the state with the smallest f-value from \(U\), moving it to the closed list, and expanding that state. It terminates when the goal state is expanded, indicating the shortest path was found and can be extracted. It may also terminate when \(U\) becomes empty, in which case no path exists. See~\cite{astar} and~\cite{thetastar} for more details regarding A*.
-
-
-\subsubsection{D* Lite Algorithm}
-D* Lite is an extension of A* that is fundamentally the same with the benefit of faster replanning. Whereas A* searches from start to goal, D* Lite~\cite{dstar1} searches from goal to start. This is because D* Lite requires the root node to remain the same for each subsequent search in order to speed up replanning~\cite{alg_comparison}. %The start node continually changes as the agent moves towards the goal, whereas the goal node is often a fixed location, making it an ideal candidate for the root node. The restriction arises from the fact that obstacle detection occurs near the vehicle within the range of its sensors. Planning from start to goal would require the detected changes to be propagated throughout the entire path, but planning from goal to start reduces the impact of these changes~\cite{phd_planning}.
-Because of this requirement, D* Lite cannot find only a prefix of the path, as the prefix would begin at the goal node and therefore be useless to the vehicle. This restriction on the root node prevents incremental search algorithms from being combined with real-time search algorithms. 
-
-%%%% Continue from here
-
-%An interesting consequence of the reversed search occurs because detection of an obstacle occurs near the UAV. Upon obstacle detection many cost estimates near the current location will change, but the environment around the goal remains unchanged. As the search propagates, it gets more focused and selective on the nodes it expands. 
+%\subsubsection{A* Algorithm}
+%\label{sec:astar}
 %
-%Therefore, by searching from goal to start, there are fewer changes to be made upon obstacle detection than when searching the opposite direction. 
- 
- 
-% Why combining incremental heuristic with real time doesnt work...root node cant change...hence moving target d* lite?
-
-
-With the search direction reversed from A*, the g-values now represent estimates of distances to the goal. The g-values, f-values, and backpointers are computed for each node the same way as they are in A*, with the addition of a new variable, known as the right-hand side value. Generally referred to as the rhs-value, this value must always satisfy the relationship 
-%is based on the g-values of $succ(s)$ and must always satisfy the relationship in~(\ref{e:rhs}). 
-\begin{equation}
-\label{e:rhs}
-	rhs(s) =  \left\{
-\begin{array}{ll}
-      0 & \;\textrm{if } s=s_{goal} \\
-      \min_{s' \in succ(s)}(g(s')+c(s',s)) & \;\textrm{otherwise}. \\
-\end{array} 
-\right.
-\end{equation}
- 
-%The rhs-value is dependent on the neighbors of a node, making it more informed than the g-value because it looks one step ahead. This introduces the concept of consistency, where a node is considered consistent if \(g(s)=rhs(s)\). When $g(s) \neq rhs(s)$, the node is called inconsistent, and is overconsistent when \(g(s)>rhs(s)\), and underconsistent when \(g(s)<rhs(s)\). Note that if $rhs(s)=\infty$, no node will point to $s$ as its minimum cost successor, and therefore $bptr(s)=NULL$.
-
-
-%The concept of consistency results in a modification to the operation of the priority queue. It now contains only the inconsistent nodes whose g-values need to be made consistent. The queue is lexicographically sorted by the key values \(k(s)\) of each node, which is defined as
-
-This introduces the concept of consistency. A node is considered consistent if \(g(s)=rhs(s)\), and inconsistent if $g(s) \neq rhs(s)$. This results in a modification to the operation of the priority queue. It now contains only the inconsistent nodes whose g-values need to be made consistent. The queue is lexicographically sorted by the key value \(k(s)\) of each node, which is defined as
-\begin{equation}
-	\label{e:keys}
-	k(s) =  \left [
-	 \begin{array}{l}
-	      \! k_1(s)\!  \\ \! k_2(s)\!
-	\end{array}  \right]
-	= \left [
-	\begin{array}{l}
-	      \min(g(s),\;rhs(s)) + h(s,s_{start}) \\ \min(g(s),\;rhs(s))
-	\end{array}\!\right].
-\end{equation}
-
-%%%% Add more D* Lite explanation?
-
-D* Lite initially sets all g-values and rhs-values to infinity, except for $rhs(s_{goal})$, which is initialized to 0. This makes $s_{goal}$ the only inconsistent vertex and therefore it gets inserted into $U$. Next, the algorithm finds the shortest path between the start and goal locations. This step is equivalent to running a reversed version of A* and therefore is a complete and optimal algorithm. Thus, if this step results in $g(s_{start})=\infty$, then the cost estimate from the start position to the goal is infinity, indicating that no path exists.
-
-If a path does exist, the agent moves from its current location to the successor node which lies on the optimal path. The environment is then scanned for changes, and if new obstacles are detected the values for each changed node are updated. This step ensures~(\ref{e:rhs}) remains satisfied for each node and adjusts their status in $U$ as needed. The key values of each node in $U$ are then updated, transforming the outdated queue into a current one. D* Lite then searches for the shortest path again, and the process is repeated until the target is reached or a path no longer exists. More details on D* Lite, as well as optimizations that can be made, are explained in~\cite{dstar1}.
-
-
-\subsubsection{Hierarchical Path-Finding A* Algorithm}
-\label{sec:hpa_intro}
-HPA*~\cite{hpa} creates multiple abstract levels to simplify the search space. These abstract levels are composed of clusters of the high-resolution nodes that represent the original map. Level 0 represents the highest map resolution, with each successive level being coarser than the one below it. The number of levels can be configured to increase with map size to help minimize search times. A coarse abstract path is planned first, which is then refined using the finer abstract levels. Level 0 nodes are then used to compute the short paths between the abstract clusters.
-
-
-To plan the coarse path, sets of entrances are defined between neighboring clusters using the adjacent level 0 nodes. Consider the 2D case of two neighboring clusters $c_1$ and $c_2$. The clusters share adjacent lines of nodes $l_1$ and $l_2$, where each line is in one cluster. For a node $s \in l_1 \cup l_2$, $symm(s)$ defines the symmetric node of $s$ with respect to the border of the two clusters. The nodes $s$ and $symm(s)$ therefore represent adjacent nodes that are not in the same cluster. With this definition an entrance $e$ can be defined as a set of nodes meeting the criteria established in~\cite{hpa}.
-
-\begin{wrapfigure}{r}{0.5\textwidth}
-	\begin{center}
- 		\includegraphics[width=0.5\textwidth]{images/transistions.png}
-		 \caption{Defining HPA* transitions on an abstract level for a $20\times20$ map that has been divided into four clusters~\cite{hpa}.}
- 		\label{f:transitions}
-	 \end{center}
-\end{wrapfigure}
-    
-HPA* defines transitions within each entrance, and A* is run on these transition nodes to find the coarse path. For entrances with a length greater than a defined threshold, two transitions are defined at the ends of the entrance. Below this length, one transition is placed at the center. Fig.~\ref{f:transitions} shows the transitions for a $20\times20$ map split into $10\times10$ clusters with a length threshold of 6 nodes. Black squares represent obstacles, gray squares represent the transitions nodes between clusters, and gray lines represent the abstract traversable edges. The curved intra-cluster edges shown in the top-right of this figure do not represent an exact path, but are intended to show that those nodes are coarse successors of one another. For simplicity, these intra-cluster edges are only shown in the top-right cluster.
-
-
-The shortest coarse path is first computed using the transition nodes, neglecting the details of the individual nodes composing the clusters. This path can be refined to lower levels if desired, and is then computed at the highest resolution as needed.  This approach reduces the computational effort required. It is much easier to find a path between small segments of the coarse path than through the entire high-resolution map. When a path becomes invalid, HPA* discards it and computes a new coarse path. In unknown environments, new entrances and transitions will likely need to be found if obstacles occupy the current transitions~\cite{hpa}. 
+%Until the development of A*, there was no central theory used to guide the search of a minimum cost path. Methods used to find shortest paths did not consider computational practicality and required every node of the map to be searched. The methods that did consider performance used domain specific knowledge to reduce the number of nodes searched, but were unable to find the shortest path. A* combines these two approaches, resulting in a complete and optimal algorithm that does not need to search the entire map~\cite{astar}.
+%
+%A* works by keeping track of four different values for every node \(s \in\ S\). These values are:
+%
+%\begin{enumerate}
+%    \item the g-value, \(g(s)\), which is an estimate of the cost from the start node to node \(s\). This cost is denoted \(c(s_{start},s)\). The g-values are initialized to infinity; 
+%    \item the heuristic, \(h(s,s_{goal})\), is an estimate of \(c(s,s_{goal})\) provided by the user; %The heuristic must be admissible, meaning it never overestimates the true cost. It must also be consistent, which is true if and only if it obeys the triangle inequality \(h(s,s'') \leq h(s,s') + h(s',s'')\). An admissible heuristic is required to guarantee the shortest path is found;
+%        \item the f-value, which is an estimate of the smallest cost of moving from \(s\) to the goal state;% and is defined as \(f(s) = g(s) + h(s,s_{goal})\);
+%        \item the backpointer of a node, given by \(bptr(s) \in succ(s)\), points to the parent node of \(s\), where \(succ(s)\) represents all the successors of a given node. It is computed by % using~(\ref{e:backpointer})
+%    %\item the backpointer of a node, given by \(bptr(s) \in succ(s)\), points to the parent node of \(s\), where \(succ(s)\) represents all the successors of a given node. The backpointer is used to extract the shortest path once the search is complete. It is initialized to \(NULL\) when \(s\) is first encountered, and is computed using~(\ref{e:backpointer})
+%\end{enumerate}
+%\begin{equation}
+%\label{e:backpointer}
+%	bptr(s) =  \left\{
+%\begin{array}{ll}
+%      NULL & \;\textrm{if } s=s_{goal} \\
+%      \textrm{argmin}_{s' \in succ(s)}(g(s')+c(s',s)) & \;\textrm{otherwise}. \\
+%\end{array}
+%\right.
+%\end{equation}
+%
+%
+%The open set \(U\) is a priority queue sorted by f-values, and the node with the minimum f-value is expanded next. Initially, it only contains $s_{start}$. Expansion of node $s$ occurs when each successor of $s$ is operated on in order to determine their f-values. A* also maintains a closed list, which is a list of all nodes that have already been expanded. The algorithm operates by removing the state with the smallest f-value from \(U\), moving it to the closed list, and expanding that state. It terminates when the goal state is expanded, indicating the shortest path was found and can be extracted. It may also terminate when \(U\) becomes empty, in which case no path exists. See~\cite{astar} and~\cite{thetastar} for more details regarding A*.
+%
+%
+%\subsubsection{D* Lite Algorithm}
+%D* Lite is an extension of A* that is fundamentally the same with the benefit of faster replanning. Whereas A* searches from start to goal, D* Lite~\cite{dstar1} searches from goal to start. This is because D* Lite requires the root node to remain the same for each subsequent search in order to speed up replanning~\cite{alg_comparison}. %The start node continually changes as the agent moves towards the goal, whereas the goal node is often a fixed location, making it an ideal candidate for the root node. The restriction arises from the fact that obstacle detection occurs near the vehicle within the range of its sensors. Planning from start to goal would require the detected changes to be propagated throughout the entire path, but planning from goal to start reduces the impact of these changes~\cite{phd_planning}.
+%Because of this requirement, D* Lite cannot find only a prefix of the path, as the prefix would begin at the goal node and therefore be useless to the vehicle. This restriction on the root node prevents incremental search algorithms from being combined with real-time search algorithms. 
+%
+%%%%% Continue from here
+%
+%%An interesting consequence of the reversed search occurs because detection of an obstacle occurs near the UAV. Upon obstacle detection many cost estimates near the current location will change, but the environment around the goal remains unchanged. As the search propagates, it gets more focused and selective on the nodes it expands. 
+%%
+%%Therefore, by searching from goal to start, there are fewer changes to be made upon obstacle detection than when searching the opposite direction. 
+% 
+% 
+%% Why combining incremental heuristic with real time doesnt work...root node cant change...hence moving target d* lite?
+%
+%
+%With the search direction reversed from A*, the g-values now represent estimates of distances to the goal. The g-values, f-values, and backpointers are computed for each node the same way as they are in A*, with the addition of a new variable, known as the right-hand side value. Generally referred to as the rhs-value, this value must always satisfy the relationship 
+%%is based on the g-values of $succ(s)$ and must always satisfy the relationship in~(\ref{e:rhs}). 
+%\begin{equation}
+%\label{e:rhs}
+%	rhs(s) =  \left\{
+%\begin{array}{ll}
+%      0 & \;\textrm{if } s=s_{goal} \\
+%      \min_{s' \in succ(s)}(g(s')+c(s',s)) & \;\textrm{otherwise}. \\
+%\end{array} 
+%\right.
+%\end{equation}
+% 
+%%The rhs-value is dependent on the neighbors of a node, making it more informed than the g-value because it looks one step ahead. This introduces the concept of consistency, where a node is considered consistent if \(g(s)=rhs(s)\). When $g(s) \neq rhs(s)$, the node is called inconsistent, and is overconsistent when \(g(s)>rhs(s)\), and underconsistent when \(g(s)<rhs(s)\). Note that if $rhs(s)=\infty$, no node will point to $s$ as its minimum cost successor, and therefore $bptr(s)=NULL$.
+%
+%
+%%The concept of consistency results in a modification to the operation of the priority queue. It now contains only the inconsistent nodes whose g-values need to be made consistent. The queue is lexicographically sorted by the key values \(k(s)\) of each node, which is defined as
+%
+%This introduces the concept of consistency. A node is considered consistent if \(g(s)=rhs(s)\), and inconsistent if $g(s) \neq rhs(s)$. This results in a modification to the operation of the priority queue. It now contains only the inconsistent nodes whose g-values need to be made consistent. The queue is lexicographically sorted by the key value \(k(s)\) of each node, which is defined as
+%\begin{equation}
+%	\label{e:keys}
+%	k(s) =  \left [
+%	 \begin{array}{l}
+%	      \! k_1(s)\!  \\ \! k_2(s)\!
+%	\end{array}  \right]
+%	= \left [
+%	\begin{array}{l}
+%	      \min(g(s),\;rhs(s)) + h(s,s_{start}) \\ \min(g(s),\;rhs(s))
+%	\end{array}\!\right].
+%\end{equation}
+%
+%%%%% Add more D* Lite explanation?
+%
+%D* Lite initially sets all g-values and rhs-values to infinity, except for $rhs(s_{goal})$, which is initialized to 0. This makes $s_{goal}$ the only inconsistent vertex and therefore it gets inserted into $U$. Next, the algorithm finds the shortest path between the start and goal locations. This step is equivalent to running a reversed version of A* and therefore is a complete and optimal algorithm. Thus, if this step results in $g(s_{start})=\infty$, then the cost estimate from the start position to the goal is infinity, indicating that no path exists.
+%
+%If a path does exist, the agent moves from its current location to the successor node which lies on the optimal path. The environment is then scanned for changes, and if new obstacles are detected the values for each changed node are updated. This step ensures~(\ref{e:rhs}) remains satisfied for each node and adjusts their status in $U$ as needed. The key values of each node in $U$ are then updated, transforming the outdated queue into a current one. D* Lite then searches for the shortest path again, and the process is repeated until the target is reached or a path no longer exists. More details on D* Lite, as well as optimizations that can be made, are explained in~\cite{dstar1}.
+%
+%
+%\subsubsection{Hierarchical Path-Finding A* Algorithm}
+%\label{sec:hpa_intro}
+%HPA*~\cite{hpa} creates multiple abstract levels to simplify the search space. These abstract levels are composed of clusters of the high-resolution nodes that represent the original map. Level 0 represents the highest map resolution, with each successive level being coarser than the one below it. The number of levels can be configured to increase with map size to help minimize search times. A coarse abstract path is planned first, which is then refined using the finer abstract levels. Level 0 nodes are then used to compute the short paths between the abstract clusters.
+%
+%
+%To plan the coarse path, sets of entrances are defined between neighboring clusters using the adjacent level 0 nodes. Consider the 2D case of two neighboring clusters $c_1$ and $c_2$. The clusters share adjacent lines of nodes $l_1$ and $l_2$, where each line is in one cluster. For a node $s \in l_1 \cup l_2$, $symm(s)$ defines the symmetric node of $s$ with respect to the border of the two clusters. The nodes $s$ and $symm(s)$ therefore represent adjacent nodes that are not in the same cluster. With this definition an entrance $e$ can be defined as a set of nodes meeting the criteria established in~\cite{hpa}.
+%
+%\begin{wrapfigure}{r}{0.5\textwidth}
+%	\begin{center}
+% 		\includegraphics[width=0.5\textwidth]{images/transistions.png}
+%		 \caption{Defining HPA* transitions on an abstract level for a $20\times20$ map that has been divided into four clusters~\cite{hpa}.}
+% 		\label{f:transitions}
+%	 \end{center}
+%\end{wrapfigure}
+%    
+%HPA* defines transitions within each entrance, and A* is run on these transition nodes to find the coarse path. For entrances with a length greater than a defined threshold, two transitions are defined at the ends of the entrance. Below this length, one transition is placed at the center. Fig.~\ref{f:transitions} shows the transitions for a $20\times20$ map split into $10\times10$ clusters with a length threshold of 6 nodes. Black squares represent obstacles, gray squares represent the transitions nodes between clusters, and gray lines represent the abstract traversable edges. The curved intra-cluster edges shown in the top-right of this figure do not represent an exact path, but are intended to show that those nodes are coarse successors of one another. For simplicity, these intra-cluster edges are only shown in the top-right cluster.
+%
+%
+%The shortest coarse path is first computed using the transition nodes, neglecting the details of the individual nodes composing the clusters. This path can be refined to lower levels if desired, and is then computed at the highest resolution as needed.  This approach reduces the computational effort required. It is much easier to find a path between small segments of the coarse path than through the entire high-resolution map. When a path becomes invalid, HPA* discards it and computes a new coarse path. In unknown environments, new entrances and transitions will likely need to be found if obstacles occupy the current transitions~\cite{hpa}. 
 
 
 
@@ -221,15 +226,17 @@ The shortest coarse path is first computed using the transition nodes, neglectin
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\subsection{Modifications and Improvements}
+\subsection{HD* Implementation}
 \label{sec:implementation}
-The operation of HD* can now be detailed, and the complete Python implementation can be found at \url{https://github.com/mds1/path-planning}. A simple way to implement hierarchical levels in 3D is through a grid composed of cubic nodes, which is the map representation used by HD*. This allows for D* Lite to easily be expanded to 3D with each node represented as a tuple of its coordinates, given by $(x,y,z)$. The successors of a node simply become the 26 nodes that surround it. On the other hand, extending HPA* to 3D introduces some challenges, which are now explained and resolved. The first subsection that follows details the problems with HPA* and the remedies used by HD*. The following four subsections,~\ref{sec:quality1} -- \ref{sec:qualityEnd}, cover methods used to improve path quality, while the final four subsections, ~\ref{sec:performance1} -- \ref{sec:performanceEnd}, cover methods used to improve performance.
+The operation of HD* can now be detailed. The pseudocode can be found in~\ref{sec:pseudocode}, and the complete Python implementation can be found at \url{https://github.com/mds1/path-planning}. 
+
+A simple way to implement hierarchical levels in 3D is through a grid composed of cubic nodes, which is the map representation used by HD*. This allows for D* Lite to easily be expanded to 3D with each node represented as a tuple of its coordinates, given by $(x,y,z)$. The successors of a node simply become the 26 nodes that surround it. On the other hand, extending HPA* to 3D introduces some challenges, which are now explained and resolved. The first subsection that follows details the problems with HPA* and the remedies used by HD*. The following four subsections,~\ref{sec:quality1} -- \ref{sec:qualityEnd}, cover methods implemented to improve the path quality compared to a simple merge of D* Lite with HD*. The final four subsections, ~\ref{sec:performance1} -- \ref{sec:performanceEnd}, cover methods implemented to further improve performance.
 
 \subsubsection{Hierarchical Modifications}
 \label{sec:mods}
 \label{sec:hpa_problems}
 %\renewcommand{\thefootnote}{\fnsymbol{footnote}}
-As detailed in Section~\ref{sec:hpa_intro}, HPA* defines transition nodes between adjacent clusters which are then used to run A* and find a coarse path~\cite{hpa}. However, this approach is not ideal for 3D maps or unknown environments. For 3D maps, the extra dimension results in many more node pairs that must be checked to define entrances between clusters, increasing the time needed to complete this step. This is not a problem when the environment is completely known, as the entrances would only need to be identified once, but for unknown environments this method will not suffice.
+As detailed in~\cite{hpa}, HPA* defines transition nodes between adjacent clusters which are then used to run A* and find a coarse path. However, this approach is not ideal for 3D maps or unknown environments. For 3D maps, the extra dimension results in many more node pairs that must be checked to define entrances between clusters, increasing the time needed to complete this step. This is not a problem when the environment is completely known, as the entrances would only need to be identified once, but for unknown environments this method will not suffice.
 
 When the environment is unknown, the UAV has no initial knowledge of which nodes are open. Once a set of transition points are defined, the UAV will likely discover that some of these transitions are blocked. If the current path uses any of these blocked nodes, it becomes invalid and needs to be recomputed. Without a new set of entrances, the new path may be much longer than the previous one. Another possibility is that every transition of a cluster is blocked and now a path cannot be found. To resolve these problems the transition nodes must be redefined, but this is a costly process. As seen with quadtrees in~\cite{framed_quadtrees1}, devoting time to repairing the map representation can significantly degrade performance. Instead, a new method of determining coarse paths is needed for real-time hierarchical planning.
 
@@ -429,17 +436,328 @@ Once HD* finds a coarse path, the elapsed time is compared to the value of $t_{m
 However, with a few extra steps, this approach can be easily modified to effectively act as a hard limit tailored to a specific vehicle. First, hardware-in-the-loop simulations using a map representative of the expected environment will allow for more accurate path-finding time statistics to be determined. Next, a function can be developed that maps the vehicle's state to the max allowable path computation time. With these two pieces, and the knowledge that the next level of refinement will always be computed if the elapsed time is less than $t_{max}$, adjust $t_{max}$ accordingly. For example, consider a case where the simulated path finding times are found be normally distributed with a standard deviation of $x$ ms, and the maximum allowable path-finding time is $y$ ms (although this is more likely to be based on velocity). Now, setting $t_{max}  = y - 2x$ ensures the path-finding time will be less than the hard limit of $y$ ms 95.4\% of the time, and setting $t_{max}  = y - 3x$ increases this to 99.7\% of the time. Additionally, the decision of whether or not to compute another iteration can be modified from a simple $t_{elapsed} \leq t_{max}$ check, to something that accounts for these standard deviations as well, such as $t_{elapsed} + 3x \leq t_{max} $.
 
 
+\subsection{HD* Pseudocode}
+\label{sec:pseudocode}
+This section provides the relevant pseudocode for HD*.
+
+
+
+\begin{algorithm}[H]
+\caption{HD* Algorithm}
+\label{a:hdstar}
+\begin{algorithmic}[1]
+
+\small
+	\State \textbf{class } \textsc{CreateLevel}
+		\State \begin{varwidth}[t]{\linewidth} 
+			\hskip\algorithmicindent Class containing the following functions: Initialize(), CalcKey(),  \par
+			\hskip\algorithmicindent \hskip\algorithmicindent AddNode(), RemoveNode(), PopNode(), UpdateVertex(), \par
+			\hskip\algorithmicindent \hskip\algorithmicindent ComputeCost(), Succ(), ComputeShortestPath() \par
+		\end{varwidth}
+		\State\hspace{\algorithmicindent} $U, \,entryfinder, \,k_m, \,g, \,rhs, $ and $bptr$ are class variables
+\begin{spacing}{0.5}
+\end{spacing}
+	\Function{SetupLevels}{\,}	
+%		\State nLevels = 1
+%		\State $d_{max} = \max(dim_x, \, dim_y, \, dim_z)$ %\Comment{$l$ represents map size in each dimension}
+%		\While{$d_{max} > 4 $} \Comment{Minimum successor distance of 4}
+%			\State $d_{max} = d_{max} / 4 $
+%			\State nLevels = nLevels + 1
+%		\EndWhile
+		\State Calculate number of levels and the successor distance at each level
+		\State Define a variable $L$ for each level, where $L$ is an instance of the CreateLevel class
+		\State \textbf{return } $L_1, L_2,..., L_{nLevels} $
+	\EndFunction
+\begin{spacing}{0.5}
+\end{spacing}
+	\Function{FindPath}{L}
+		\State $ d = \textrm{EuclideanDistance}(s_{start}, s_{goal}) $
+		\State $ path = [ s_{start}, s_{goal} ] $
+		\If{$d < 28$} \Comment{Distance too short to benefit from hierarchical planning}
+			\State $ path = L_0$.ComputeShortestPath($path$)
+			\State $ \textbf{return } path $
+		\EndIf
+		
+		\For{$level_a = nLevels \textbf{ to }  0$}
+			\If{$ d >= 7\times L_{level_a}.$length} \Comment{Length is the successor distance}
+				\State $ path = L_{level_a}$.ComputeShortestPath($path$)
+				\State \textbf{break}
+			\EndIf
+		\EndFor
+		
+		\While{$t_{max}$ has not been exceeded}
+			\State $path_{refined} = $ segment of path that lies within the refinement distance $d_{\,r}$
+			\For{$level_b = level_a-1 \textbf{ to } 0$} \Comment{Start refinement from next lowest level}
+				\State $ path_{refined} = L_{level_b}$.ComputeShortestPath($path_{refined}$)
+			\EndFor
+		\EndWhile
+		
+		\State Splice $path_{refined}$ into the beginning of $path$
+		\State$ \textbf{return } path $
+		
+	\EndFunction
+
+\algstore{myalg}
+\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}[H]
+\begin{algorithmic}[1]
+\algrestore{myalg}
+	
+
+
+\item[]	
+
+		
+	\Function{GenerateTrajectory}{$path$}
+		\State $ newpath = \emptyset $
+		\For{$ i = 0 \textbf{ to } \textrm{length}(path)-1$}
+			\State $s = path_i $
+			\State $s' = path_{i+1} $
+			\State $d_x = s_x-s'_x;\,\, d_y = s_y-s'_y;\,\, d_z = s_z-s'_z$
+			\State $d_{max} = \max(|d_x|,\, |d_y|,\, |d_z|) $
+			\If{$d_{max} \leq 1$} \Comment{Occurs when spline points are close together}
+				\State $newpath = newpath \cup \{s'\}$
+			\Else
+				\For{$j = 1 \textbf{ to } d_{max}$}
+					\State $f_x = d_x/d_{max};\,\, f_y = d_y/d_{max}; \,\, f_z = d_z/d_{max} $
+					\State $u_x = s_x + j\times f_x $
+					\State $u_y = s_y + j\times f_y $
+					\State $u_z = s_z + j\times f_z $
+					\State $newpath = newpath \cup \{(u_x,\, u_y,\, u_z')\}$
+				\EndFor
+			\EndIf			
+		\EndFor
+		\State $\textbf{return } newpath $
+	\EndFunction
+\begin{spacing}{0.5}
+\end{spacing}
+    	\Function{Main}{L}
+		\State $ L = \textrm{SetupLevels}()$
+		\State Scan environment for obstacles
+		\While{$s_{start} \neq s_{goal}$}
+			\State $path = \textrm{FindPath}(L)$
+			\State $path = \textrm{SmoothPath}(path)$
+			\State $path = \textrm{CatmullRomSpline}(path)$
+			\State $path = \textrm{GenerateTrajectory}(path)$
+		
+			\State $s_{last} = s_{start}$
+			\State $dfs = 0$ \Comment{Tracks distance traveled since path was found}
+			
+			\While{$s_{start} \neq s_{goal}$ \textbf{ and} path is valid}
+				\State Move to next point in $path$
+				\State $s_{start} = \textrm{current location} $
+				\State Scan for new obstacles and determine if they block the current path
+				\If{current path is blocked}
+					%\State $ k_m += h(s_{last}, s_{start}) $
+					%\State $ s_{last} = s_{start} $
+					\For{\textbf{all} nodes $u$ with changed costs}
+						\State Update traversal cost of $u$
+					\EndFor
+					\State Path is no longer valid
+				\EndIf
+				
+				\State $dfs = \textrm{EuclideanDistance}(s_{start}, s_{last})$ 
+				\If{$dfs \geq d_{\,r}/2$ \textbf{ or} goal has moved}
+					\State Path is no longer valid
+				\EndIf
+				
+			\EndWhile
+			
+			
+		\EndWhile
+	\EndFunction
+	
+		
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}[H]
+This version assumes $c_x=c_y=1$
+	\caption{Path Smoothing Algorithm}
+	\label{a:smoothing}
+	\begin{algorithmic}[1]
+
+    	\Function{SmoothPath}{$[s_0, s_1,...,s_n]$}   \Comment{Nodes are $(x,y,z)$ coordinate tuples}
+		\State $ k = 0 $
+		\State $ p_k = s_0 $
+		\For{$i = 1 \textbf{ to } n-1$}
+
+			\State $x_1 = p_{k,\,x}\,; \,\, y_1 = p_{k,\,y}\,; \,\, z_1 = p_{k,\,z} $
+			\State $x_2 = s_{i+1,\,x}\,; \,\, y_2 = s_{i+1,\,y}\,; \,\, z_2 = s_{i+1,\,z} $
+			\If{$ (z_1\neq z_2 \textbf{ and } c_z \neq 1) \textbf{ or not } \textrm{LineOfSight}(p_k, s_{i+1})$} 
+				\State $ k\,+=1$
+				\State $ p_k = s_i$
+			\EndIf
+			
+		\EndFor
+		\State $k\, += 1 $
+		\State $p_k = s_n $
+		\State $path = [p_0,p_1,...p_k] $
+		\State $\textbf{return } path $
+		
+	\EndFunction
+	
+		
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+
+
+\begin{algorithm}[H]
+	$t_i$ determines the parameterization, $\alpha=0.5$ results in the centripetal parameterization used by HD*, $p_1$ and $p_2$ are a pair of $(x,y,z)$ input control points. HD* uses $nPts = 5$, resulting in three points between $p_1$ and $p_2$.
+	\caption{Catmull-Rom Spline Generation}
+	\label{a:splines}
+	\begin{algorithmic}[1]
+
+    	\Function{ParameterValues}{$t_i, p_1, p_2, \alpha$}   
+		\State $dx = p_{1,x} - p_{2,x}\,;\,\, dy = p_{1,y}-p_{2,y}\,;\,\, dx = p_{1,z}-p_{2,z}$
+		\State $\textbf{return } \left(\sqrt{dx^2 + dy^2 + sz^2}\right)^\alpha + t_i $		
+	\EndFunction
+	
+	\Function{CatmullRomPoints}{$p_0, p_1, p_2, p_3, nPts$} 
+		\State $t_0 = 0 $
+		\State $\textbf{for } i = 1 \textbf{ to } 3 \textbf{ do } t_i = \textrm{ParameterValues}(t_{i-1},\, p_{i-1},\, p_{i},\, \alpha) $
+	
+		\State $\textbf{if } t_0 = t_1 \textbf{ then } t_1 = 10^{-8} $\Comment{to avoid divide by zero error}
+		\State $\textbf{if } t_2 = t_3 \textbf{ then } t_3 = t_2+10^{-8} $
+		
+		\State $ t $ is a linearly spaced column vector between $[t_1, t_2]$ with $nPts$ elements
+		\setlength{\lineskip}{4pt}
+		\State $ L_{01} = \frac{t_1-t}{t_1-t_0} \times p_0 + \frac{t - t_0}{t_1 - t_0} \times p_1 $
+		\State $ L_{12} = \frac{t_2-t}{t_2-t_1} \times p_1 + \frac{t - t_1}{t_2 - t_1} \times p_2 $
+		\State $ L_{23} = \frac{t_3-t}{t_3-t_2} \times p_2 + \frac{t - t_2}{t_3 - t_2} \times p_3 $
+	
+		\State $ L_{012} = \frac{t_2-t}{t_2-t_0} \times L_{01} + \frac{t - t_0}{t_2 - t_0} \times L_{12} $
+		\State $ L_{123} = \frac{t_3-t}{t_3-t_1} \times L_{12} + \frac{t - t_1}{t_3 - t_1} \times L_{23} $
+		
+		\State $ C = \frac{t_2-t}{t_2-t_1}\times L_{012} + \frac{t-t_1}{t_2-t_1}\times L_{123} $
+	\EndFunction
+	
+	\Function{CatmullRomSpline}{$path$}
+		\If{$path$ has less than 3 nodes}
+			\State Not enough nodes to generate a spline
+			\State $\textbf{return } path$
+		\Else
+			\State Copy first and last nodes such that $path_0=path_1$ and $path_{n-1} = path_n$ 
+			\State $ C = \emptyset $
+			\State $ k = \textrm{length}(path)-3 $
+			\For{$i = 1 \textbf{ to } k $}
+				\State $c=\textrm{CatmullRomPoints}(path_i, \, path_{i+1}, \, path_{i+2}, \, path_{i+3}, nPts )$
+				\State $ C = \{C\} \cup \{c\} $
+			\EndFor
+			\State $\textbf{return } C $
+
+		\EndIf
+		
+	\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}[H]
+This version assumes $c_x=c_y=1$
+	\caption{Cost Computation}
+	\label{a:computecost}
+	\begin{algorithmic}[1]
+
+	\Function{EuclideanDistance}{$s,s'$}
+		\State $\textbf{return } \sqrt{ (s_x-s'_x)^2 + (s_y-s'_y)^2 + (s_z-s'_z)^2} $
+	\EndFunction
+	
+    	\Function{ComputeCost}{$s,s'$} 
+		\If{$s'$ contains an obstacle}
+			\State \textbf{return} $\infty$
+		\ElsIf{computing cost for the coarse path}
+			\If{within search radius \textbf{and not} LineOfSight$(s,s')$}
+				\State \textbf{return} $\infty$
+			\EndIf
+		\EndIf
+		
+		\If{$s_z \neq s'_z$} \label{l:costassumptions}
+			\State $costFactor = c_z$
+		\Else
+			\State $costFactor = 1$ \Comment{Default planar cost}
+		\EndIf
+		%\State $ d_x = x_2-x_1;\,\, d_z = z_2-z_1;\,\, d_z = z_2-z_1 $
+		\State $cost = costFactor \times \textrm{EuclideanDistance}(s,s')$ %\sqrt{d_x^{\,2} + d_y^{\,2} + d_z^{\,2}}$
+		\State $\textbf{return } cost$
+		
+	\EndFunction
+	
+		
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}[H]
+	The entries in $entryfinder$ and $U$ are formatted as $[k_1, k_2, u]$, where $k_1$ and $k_2$ represent the priorities and $u$ is the node
+	\caption{Priority Queue Operations for Hybrid Data Structure}
+	\label{a:priority_queue_operations}
+	\begin{algorithmic}[1]
+	
+	\State $ entryfinder = \emptyset $ \Comment{Hash table mapping tasks in $U$ to entries}
+	
+	\Function{RemoveNode}{$u$} 
+		\State Delete entry in $entryfinder$ with key $u$
+		
+	\EndFunction
+	
+	\Function{AddNode}{$k_1, k_2,u$} \Comment{Add node or update key of existing node}
+		\If{$u \in entryfinder$}
+			\State RemoveNode{$(u)$}
+		\EndIf
+		\State Add key $u$ with value $[k_1, k_2, u]$ to $entryfinder$
+		\State Add entry $[k_1, k_2, u]$ to $U$
+	\EndFunction
+	
+	\Function{PopNode}{\,}
+		\While{True}
+			\State $k_1,\,\,k_2,\,\,u = U.\textrm{Pop}() $
+			\If{$ u \in entryfinder$}
+				\State Delete entry in $entryfinder$ with key $u$
+				\State $\textbf{return } [k_1, k_2, u] $
+			\EndIf
+			
+		\EndWhile
+	\EndFunction
+
+
+
+	\end{algorithmic}
+\end{algorithm}
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
 
 \section{Simulation Results}
 \label{chap:performance}
+The performance of HD* was analyzed in a variety of scenarios. Performance is measured with respect to path cost, the number of nodes expanded, and mean path computation time. The values reported for computation time and are given in milliseconds and refer to the CPU time. It include all stages of the path-finding process, from the initial coarse path to the final trajectory. Therefore, the computation time represents the delay between requesting a new path and obtaining a path to follow. 
+
+First, the suboptimality of HD* is quantified; then it is compared to 3D Field D*~\cite{3dfield}, which is another real-time planning algorithm. Next, various parameters are modified to determine how performance can vary in different scenarios. These parameters and their default values are listed in Table~\ref{t:parameters}, and are the values used for each test case unless otherwise specified. Finally, a few example paths will be presented. Results were obtained on a 2.6 GHz Intel Core i5 MacBook Pro with 8 GB of RAM.
 
 \renewcommand{\figureWidth}{0.9\textwidth}	
 
-\begin{table}[!t]
+\begin{table}[H]
 %	\renewcommand{\arraystretch}{1.3}
 	\caption{Default Testing Parameters}
 	\label{t:parameters}
@@ -462,9 +780,7 @@ However, with a few extra steps, this approach can be easily modified to effecti
 	\end{tabular}
 \end{table}
 
-The performance of HD* was analyzed in a variety of scenarios. Performance is measured with respect to path cost, the number of nodes expanded, and mean path computation time. The values reported for computation time and are given in milliseconds and refer to the CPU time. It include all stages of the path-finding process, from the initial coarse path to the final trajectory. Therefore, the computation time represents the delay between requesting a new path and obtaining a path to follow. 
 
-First, the suboptimality of HD* is quantified; then it is compared to 3D Field D*~\cite{3dfield}, which is another real-time planning algorithm. Next, various parameters are modified to determine how performance can vary in different scenarios. These parameters and their default values are listed in Table~\ref{t:parameters}, and are the values used for each test case unless otherwise specified. Finally, a few example paths will be presented. Results were obtained on a 2.6 GHz Intel Core i5 MacBook Pro with 8 GB of RAM.
 
 
 \subsection{Quantifying Degree of Suboptimality}
@@ -477,7 +793,7 @@ To measure the variability in cost, the path cost found by HD* with an empty ini
 \newcommand{\columnHeightTwo}{0.2cm}
 \setlength\belowcaptionskip{5pt}						% fixes caption being too close to table
 
-\begin{table}[!t]% order of placement preference: here, top, bottom
+\begin{table}[H]% order of placement preference: here, top, bottom
 %\small
 	\begin{center}
   		\caption{HD* Path Cost vs. Optimal Path Cost}
