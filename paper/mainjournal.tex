@@ -49,13 +49,14 @@ Flight paths for unmanned aerial vehicles (UAVs) often consist of traveling from
 
 Path planning in known, 2D terrain is a well-studied problem, and various solutions to find the shortest path exist. These include potential field methods~\cite{poten_field, poten_field_noise}, visibility graphs~\cite{vis_orig}, and heuristic based planners such as the widely used A* algorithm~\cite{astar}. There are three significant problems with existing solutions that make them unsuitable for real-time 3D path planning. Heuristic-based algorithms are designed for off-line operation in known environments, so their primary function is to find the true shortest path, with minimal focus on reducing computation time. Additionally, these solutions are generally designed for 2D environments and do not necessarily carry over well to 3D environments. Visibility graphs, for example, are guaranteed to find the shortest path in 2D, but are frequently unable to find the shortest path in 3D~\cite{vis_orig}. Lastly, these approaches are not designed to update paths to accommodate unexpected changes in terrain. When a path needs to be recalculated, previously used information cannot always be reused to speed up the current search. 
 
-Real-time 3D path planning in unknown terrain has not been studied as extensively and fewer solutions exist. In this paper a new path planning algorithm in this category is presented, called Hierarchical D* Lite (HD*). HD* is based on D* Lite~\cite{dstar1} and Hierarchical Path-Finding A* (HPA*)~\cite{hpa}, but introduces numerous changes to improve performance and path quality. Although D* Lite and HPA* are 2D algorithms not designed for real-time use, they were selected as the foundation of this algorithm for a few reasons:
+Real-time 3D path planning in unknown terrain has not been studied as extensively and fewer solutions exist. In this paper a new path planning algorithm in this category is presented, called Hierarchical D* Lite (HD*). HD* is based on D* Lite~\cite{dstar1}, an incremental heuristic planner, and Hierarchical Path-Finding A* (HPA*)~\cite{hpa}, a grid-based planer, but introduces numerous changes to improve performance and path quality. The objective of HD* was to develop a near-optimal real-time planner for unknown environments. Although D* Lite and HPA* are 2D algorithms not designed for real-time use, they were selected as the foundation of HD* because they possess properties that will help reach this goal.
 
 \begin{enumerate}
   \item D* Lite guarantees an optimal path can be found with an appropriate heuristic
   \item D* Lite allows the trade-off between optimality and computation time to be easily adjusted by modifying this heuristic
+  \item HPA* offers rapid, near-optimal planning in dynamics environments
    \item The grid-based abstractions used by HPA* make it easy to merge with D* Lite
-   \item Both algorithms are straightforward and easy to understand, and thus easy to modify and build upon
+%    \item Both algorithms are straightforward and easy to understand, and thus easy to modify and build upon
 \end{enumerate}
 
 The result is a new heuristic-based planning algorithm capable of computing near-optimal paths fast enough to operate in real-time in unknown environments. HD* also provides flexibility over the trade-off between path optimality and computation time. Furthermore, because it is algorithmically simple, it is modular in design and therefore easy to extend or modify. This means additional capabilities, such as accounting for vehicle dynamics, can be added simply by altering pre-existing functions.
@@ -112,11 +113,147 @@ Path planning applications typically do not require the entire path to be known 
 \section{Hierarchical D* Lite}
 \label{sec:background}
 
-This paper presents an algorithm called HD*, which combines D* Lite with a modified version of HPA*. D* Lite allows a full path to be replanned quicker than the A* algorithm it is based on. However, D* Lite is still not sufficient for real-time use in a 3D environment, so HD* builds on the approach of HPA* by utilizing hierarchical planning to reduce computation time. HD* uses a novel hierarchical approach which is suitable for any environment, accounts for detected obstacles, and provides the user with flexibility on the tradeoff between path cost and computation time. This results in a heuristic-based algorithm designed for real-time use with unknown environments or moving targets. Section~\ref{chap:performance} shows that compared to an existing 3D version of D* Lite, known as 3D Field D*~\cite{3dfield}, HD* reduces the number of nodes searched by an order of magnitude. This significantly improves computation speed, but comes with a worst-case increase in path cost of less than 10\%. 
+This paper presents an algorithm called HD*, which combines D* Lite with a modified version of HPA*. D* Lite allows a full path to be replanned quicker than the A* algorithm it is based on. However, D* Lite is still not sufficient for real-time use in a 3D environment, so HD* builds on the approach of HPA* by utilizing hierarchical planning to reduce computation time. HD* uses a novel hierarchical approach which is suitable for any environment, accounts for detected obstacles, and provides the user with flexibility on the tradeoff between path cost and computation time. This results in a heuristic-based algorithm designed for real-time use with unknown environments or moving targets. Section~\ref{chap:performance} shows that compared to an existing 3D version of D* Lite, known as 3D Field D*~\cite{3dfield}, HD* reduces the number of nodes searched by an order of magnitude. This significantly improves computation speed, but comes with a worst-case increase in path cost of around 10\%, compared to the optimal path. 
 
 %Before discussing HD*, it is necessary to briefly describe the algorithms that compose its foundation, which are A*, D* Lite, and HPA*. It is assumed all traversal costs are one for open nodes and infinity for blocked nodes. Nodes of unknown status are assumed to be open. 
 
-Before continuing with this section, it is recommended that the reader be familiar with A*, D* Lite, and HPA*, which are the three algorithms that compose the foundation of HD*. References for these algorithms can be found in~\cite{astar},~\cite{dstar1}, and~\cite{hpa}, respectively. Note that throughout this paper it is assumed that all traversal costs are one for open nodes and infinity for blocked nodes, and that nodes of unknown status are assumed to be open. 
+Before continuing with this section, it is recommended that the reader be familiar with A*, D* Lite, and HPA*, which are the three algorithms that compose the foundation of HD*. References for these algorithms can be found in~\cite{astar},~\cite{dstar1}, and~\cite{hpa}, respectively. Note that throughout this paper it is assumed that all traversal costs are one for open nodes and infinity for blocked nodes, and that nodes of unknown status are assumed to be open. The operation of HD* can now be detailed, and the complete Python implementation can be found at \url{https://github.com/mds1/path-planning}. Pseudocode is provided throughout this section, beginning with Algorithm~\ref{a:hdstar} below.
+
+%The pseudocode can be found in~\ref{sec:pseudocode}, 
+
+
+\begin{algorithm}[H]
+\caption{HD* Algorithm}
+\label{a:hdstar}
+\begin{algorithmic}[1]
+
+\small
+	\State \textbf{class } \textsc{CreateLevel}
+		\State \begin{varwidth}[t]{\linewidth} 
+			\hskip\algorithmicindent Class containing the following functions: Initialize(), CalcKey(),  \par
+			\hskip\algorithmicindent \hskip\algorithmicindent AddNode(), RemoveNode(), PopNode(), UpdateVertex(), \par
+			\hskip\algorithmicindent \hskip\algorithmicindent ComputeCost(), Succ(), ComputeShortestPath() \par
+		\end{varwidth}
+		\State\hspace{\algorithmicindent} $U, \,entryfinder, \,k_m, \,g, \,rhs, $ and $bptr$ are class variables
+\begin{spacing}{0.5}
+\end{spacing}
+	\Function{SetupLevels}{\,}	
+%		\State nLevels = 1
+%		\State $d_{max} = \max(dim_x, \, dim_y, \, dim_z)$ %\Comment{$l$ represents map size in each dimension}
+%		\While{$d_{max} > 4 $} \Comment{Minimum successor distance of 4}
+%			\State $d_{max} = d_{max} / 4 $
+%			\State nLevels = nLevels + 1
+%		\EndWhile
+		\State Calculate number of levels and the successor distance at each level
+		\State Define a variable $L$ for each level, where $L$ is an instance of the CreateLevel class
+		\State \textbf{return } $L_1, L_2,..., L_{nLevels} $
+	\EndFunction
+\begin{spacing}{0.5}
+\end{spacing}
+	\Function{FindPath}{L}
+		\State $ d = \textrm{EuclideanDistance}(s_{start}, s_{goal}) $
+		\State $ path = [ s_{start}, s_{goal} ] $
+		\If{$d < 28$} \Comment{Distance too short to benefit from hierarchical planning}
+			\State $ path = L_0$.ComputeShortestPath($path$)
+			\State $ \textbf{return } path $
+		\EndIf
+		
+		\For{$level_a = nLevels \textbf{ to }  0$}
+			\If{$ d >= 7\times L_{level_a}.$length} \Comment{Length is the successor distance}
+				\State $ path = L_{level_a}$.ComputeShortestPath($path$)
+				\State \textbf{break}
+			\EndIf
+		\EndFor
+		
+		\While{$t_{max}$ has not been exceeded}
+			\State $path_{refined} = $ segment of path that lies within the refinement distance $d_{\,r}$
+			\For{$level_b = level_a-1 \textbf{ to } 0$} \Comment{Start refinement from next lowest level}
+				\State $ path_{refined} = L_{level_b}$.ComputeShortestPath($path_{refined}$)
+			\EndFor
+		\EndWhile
+		
+		\State Splice $path_{refined}$ into the beginning of $path$
+		\State$ \textbf{return } path $
+		
+	\EndFunction
+
+\algstore{myalg}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\begin{algorithmic}[1]
+\algrestore{myalg}
+	
+
+
+\item[]	
+
+		
+	\Function{GenerateTrajectory}{$path$}
+		\State $ newpath = \emptyset $
+		\For{$ i = 0 \textbf{ to } \textrm{length}(path)-1$}
+			\State $s = path_i $
+			\State $s' = path_{i+1} $
+			\State $d_x = s_x-s'_x;\,\, d_y = s_y-s'_y;\,\, d_z = s_z-s'_z$
+			\State $d_{max} = \max(|d_x|,\, |d_y|,\, |d_z|) $
+			\If{$d_{max} \leq 1$} \Comment{Occurs when spline points are close together}
+				\State $newpath = newpath \cup \{s'\}$
+			\Else
+				\For{$j = 1 \textbf{ to } d_{max}$}
+					\State $f_x = d_x/d_{max};\,\, f_y = d_y/d_{max}; \,\, f_z = d_z/d_{max} $
+					\State $u_x = s_x + j\times f_x $
+					\State $u_y = s_y + j\times f_y $
+					\State $u_z = s_z + j\times f_z $
+					\State $newpath = newpath \cup \{(u_x,\, u_y,\, u_z')\}$
+				\EndFor
+			\EndIf			
+		\EndFor
+		\State $\textbf{return } newpath $
+	\EndFunction
+\begin{spacing}{0.5}
+\end{spacing}
+    	\Function{Main}{L}
+		\State $ L = \textrm{SetupLevels}()$
+		\State Scan environment for obstacles
+		\While{$s_{start} \neq s_{goal}$}
+			\State $path = \textrm{FindPath}(L)$
+			\State $path = \textrm{SmoothPath}(path)$
+			\State $path = \textrm{CatmullRomSpline}(path)$
+			\State $path = \textrm{GenerateTrajectory}(path)$
+		
+			\State $s_{last} = s_{start}$
+			\State $dfs = 0$ \Comment{Tracks distance traveled since path was found}
+			
+			\While{$s_{start} \neq s_{goal}$ \textbf{ and} path is valid}
+				\State Move to next point in $path$
+				\State $s_{start} = \textrm{current location} $
+				\State Scan for new obstacles and determine if they block the current path
+				\If{current path is blocked}
+					%\State $ k_m += h(s_{last}, s_{start}) $
+					%\State $ s_{last} = s_{start} $
+					\For{\textbf{all} nodes $u$ with changed costs}
+						\State Update traversal cost of $u$
+					\EndFor
+					\State Path is no longer valid
+				\EndIf
+				
+				\State $dfs = \textrm{EuclideanDistance}(s_{start}, s_{last})$ 
+				\If{$dfs \geq d_{\,r}/2$ \textbf{ or} goal has moved}
+					\State Path is no longer valid
+				\EndIf
+				
+			\EndWhile
+			
+			
+		\EndWhile
+	\EndFunction
+	
+		
+	\end{algorithmic}
+\end{algorithm}
+
+
 
 % The heuristic based A* algorithm will first be described, followed by an explanation of the incremental planner D* Lite. Lastly, the principles behind HPA* are covered. Modifications have been made to these algorithms to make them suitable for unknown 3D environments, and those changes will be presented in Section~\ref{sec:implementation}.
 
@@ -228,13 +365,12 @@ Before continuing with this section, it is recommended that the reader be famili
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\subsection{HD* Implementation}
-\label{sec:implementation}
-The operation of HD* can now be detailed. The pseudocode can be found in~\ref{sec:pseudocode}, and the complete Python implementation can be found at \url{https://github.com/mds1/path-planning}. 
+%\subsection{HD* Implementation}
+%\label{sec:implementation}
 
 A simple way to implement hierarchical levels in 3D is through a grid composed of cubic nodes, which is the map representation used by HD*. This allows for D* Lite to easily be expanded to 3D with each node represented as a tuple of its coordinates, given by $(x,y,z)$. The successors of a node simply become the 26 nodes that surround it. On the other hand, extending HPA* to 3D introduces some challenges, which are now explained and resolved. The first subsection that follows details the problems with HPA* and the remedies used by HD*. The following four subsections,~\ref{sec:quality1} -- \ref{sec:qualityEnd}, cover methods implemented to improve the path quality compared to a simple merge of D* Lite with HD*. The final four subsections, ~\ref{sec:performance1} -- \ref{sec:performanceEnd}, cover methods implemented to further improve performance.
 
-\subsubsection{Hierarchical Modifications}
+\subsection{Hierarchical Modifications}
 \label{sec:mods}
 \label{sec:hpa_problems}
 %\renewcommand{\thefootnote}{\fnsymbol{footnote}}
@@ -242,7 +378,7 @@ As detailed in~\cite{hpa}, HPA* defines transition nodes between adjacent cluste
 
 When the environment is unknown, the UAV has no initial knowledge of which nodes are open. Once a set of transition points are defined, the UAV will likely discover that some of these transitions are blocked. If the current path uses any of these blocked nodes, it becomes invalid and needs to be recomputed. Without a new set of entrances, the new path may be much longer than the previous one. Another possibility is that every transition of a cluster is blocked and now a path cannot be found. To resolve these problems the transition nodes must be redefined, but this is a costly process. As seen with quadtrees in~\cite{framed_quadtrees1}, devoting time to repairing the map representation can significantly degrade performance. Instead, a new method of determining coarse paths is needed for real-time hierarchical planning.
 
-Another issue with HPA* is the lack of consideration for known obstacles. If the obstacles are small and only cover a few nodes this would be an acceptable approach. The level 0 planner would simply route the path around the blocked nodes. When the domain includes large obstacles, such as buildings, this becomes problematic. It is possible that the coarse path may pass through a large obstacle, which can result if the coarse path contains a transition node on either side of the blocked region. Planning a high resolution path between these two nodes may result in a very suboptimal path. Computation time increases with path length, so even if longer, suboptimal paths are acceptable, the high resolution planning may take longer than desired. 
+Another issue with HPA* is the lack of consideration for known obstacles. If the obstacles are small and only cover a few nodes this would be an acceptable approach. The level 0 planner, which is the highest resolution planner, would simply route the path around the blocked nodes. When the domain includes large obstacles, such as buildings, this becomes problematic. It is possible that the coarse path may pass through a large obstacle, which can result if the coarse path contains a transition node on either side of the blocked region. Planning a high resolution path between these two nodes may result in a very suboptimal path. Computation time increases with path length, so even if longer, suboptimal paths are acceptable, the high resolution planning may take longer than desired. 
 
 
 
@@ -259,7 +395,7 @@ Successor nodes can be rapidly computed from any node and planning is no longer 
 	 \end{center}
 \end{wrapfigure}
 
-There is one problem with this approach that is solved in the following way. Recall that D* Lite plans from goal to start, and during the coarse planning stage, it is unlikely that the start node becomes a hierarchical successor. To resolve this, each time successor nodes are computed HD* checks the distance between the start node and the node being expanded. If it is within a distance of twice the cluster size, it is considered a successor. This distance was chosen in order to prevent the need for a final short transition to reach the start node, which also helps reduce the number of nodes expanded. An example of this is shown in Fig.~\ref{f:small_transition}, which uses $3\times 3$ clusters. The triangles represent the nodes available for path planning using the HD* successor definition, and the black squares represent obstacles. The path between $s_{current}$ (the circle) and $s_{start}$ (the diamond) will not pass through node $s_1$ (the triangle in the bottom row) as there is not line-of-sight between the centers of $s_1$ and $s_{start}$. Therefore, the path would normally have to pass through $s_2$ (the top-middle triangle). Instead, since $s_{start}$ is nearby and has line-of-sight with $s_{current}$, the coarse planner is allowed to jump directly between the two.
+There is one problem with this approach that is solved in the following way. D* Lite plans from goal to start, and during the coarse planning stage, it is unlikely that the start node becomes a hierarchical successor. To resolve this, each time successor nodes are computed HD* checks the distance between the start node and the node being expanded. If it is within a distance of twice the cluster size, it is considered a successor. This distance was chosen in order to prevent the need for a final short transition to reach the start node, which also helps reduce the number of nodes expanded. An example of this is shown in Fig.~\ref{f:small_transition}, which uses $3\times 3$ clusters. The triangles represent the nodes available for path planning using the HD* successor definition, and the black squares represent obstacles. The path between $s_{current}$ (the circle) and $s_{start}$ (the diamond) will not pass through node $s_1$ (the triangle in the bottom row) as there is not line-of-sight between the centers of $s_1$ and $s_{start}$. Therefore, the path would normally have to pass through $s_2$ (the top-middle triangle). Instead, since $s_{start}$ is nearby and has line-of-sight with $s_{current}$, the coarse planner is allowed to jump directly between the two.
 
 \begin{figure}[h]
 	\begin{center}
@@ -281,7 +417,7 @@ This check is only performed for the highest level of path-finding, as it is alr
 %\subsubsection{Methods Used to Improve Path Quality}
 %The framework is now set up to adapt and merge D* Lite and HPA* into HD*, but there are many improvements that can be made. This subsection will discuss the optimizations implemented to produce shorter and more realistic looking paths, while Section~\ref{chap:performance_methods} will detail the techniques used to obtain performance suitable for real-time use.
 
-\subsubsection{Abstract Levels}
+\subsection{Abstract Levels}
 \label{sec:quality1}
 
 
@@ -294,292 +430,17 @@ Due to the method used to determine successors, abstract levels are defined by t
 %As an example, a map with an initial size of 128 in each dimension would have four levels. Level 0 consists of the individual nodes composing the map. Levels 1, 2, and 3 use successor nodes as stated above. At level 3, the successor nodes are 16 nodes apart, which is \sfrac{1}{8} of 128, so no additional levels are created.
 
 
-\subsubsection{Path Refinement and Smoothing}
+\subsection{Path Refinement and Smoothing}
 \label{sec:refinement}
 The use of multiple abstract levels allows the inclusion of a refinement stage to increase the benefits of path smoothing. The initial coarse path is likely to result in a very conservative path that passes widely around obstacles, and smoothing would not do much to resolve this if the nodes are far apart. To improve the smoothing quality, the initial coarse path is repeatedly refined until it is represented by the highest resolution nodes. This refinement is performed by using the next level down to compute the shortest path between successive nodes of the current level. If the initial coarse path is a level 3 path, the first stage of refinement is performed by finding the shortest path between each pair of these nodes using level 2 nodes. With the coarse path represented by level 2 nodes, the process is repeated using level 1 nodes. Finally, it is repeated one more time until represented by the level 0 nodes. This increases the number of nodes used to define the path, which increases the quality of path smoothing and therefore provides shorter, less conservative, and more realistic paths. Once this path is represented as level 0 nodes, it can be smoothed.
 
-The smoothing algorithm is a modified version of the one presented in~\cite{thetastar}, and works as follows. The path is input as a series of nodes. Starting from the first node in the path, \(s_0\), the smoothing algorithm checks for line-of-sight to the third node in the path, \(s_2\). If line-of-sight exists, the intermediary node \(s_1\) is removed from the path. This process is repeated until the goal node is reached or there is not line-of-sight from the first node. If there is not line-of-sight to a node, the process now restarts from that node and continues in the same fashion. When the status of a node is unknown, it is assumed to be open. Therefore, when smoothing the path, line-of-sight is assumed to exist between nodes that have yet to be reached by the agent. 
+The smoothing algorithm, which is Algorithm~\ref{a:smoothing} below, is a modified version of the one presented in~\cite{thetastar}, and works as follows. The path is input as a series of nodes. Starting from the first node in the path, \(s_0\), the smoothing algorithm checks for line-of-sight to the third node in the path, \(s_2\). If line-of-sight exists, the intermediary node \(s_1\) is removed from the path. This process is repeated until the goal node is reached or there is not line-of-sight from the first node. If there is not line-of-sight to a node, the process now restarts from that node and continues in the same fashion. When the status of a node is unknown, it is assumed to be open. Therefore, when smoothing the path, line-of-sight is assumed to exist between nodes that have yet to be reached by the agent. 
 
-Smoothing is only used in directions of uniform cost in order to ensure this process does not increase path cost. This can occur when altitude changes are expensive. Smoothing a quick and steep traverse into a gradual slope results in the UAV traveling upwards for a longer time. HD* considers the cost of altitude changes to be the same regardless of the path angle relative to the ground, thus using more distance to change altitude would result in an increased cost. 
+Smoothing is only used in directions of uniform cost in order to ensure this process does not increase path cost. This can occur when altitude changes are expensive. Smoothing a quick and steep traverse into a gradual slope results in the UAV traveling upwards for a longer time. HD* assumes the cost of altitude changes to be the same regardless of the path angle relative to the ground, thus using more distance to change altitude would result in an increased cost. The cost computation process, described in~\ref{sec:costcomputation}, can be modified to adjust this assumption.
 
-The next step involves generating a centripetal Catmull-Rom spline~\cite{splines} to smooth any sharp turns from the path. This type of spline is used as it is guaranteed to pass through the specified nodes~\cite{gameproggems}, and will not result in any self-intersections or cusps~\cite{splines}. To create the splines, four consecutive points are used as the input, and the result is a spline between the second and third points. To generate a spline between the first two nodes, simply input the first node as both the first and second points. Likewise, the spline between the last two nodes is created by using the final node for the third and fourth input points. The resulting spline is represented by three additional points between the second and third input points. Generation of these splines causes an increase in path length but is necessary to create a path that can realistically be followed. Modification of spline generation, paired with a modification of the cost computation discussed in Section~\ref{sec:costcomputation}, would allow HD* to account for vehicle dynamics. Here, the parameterization of the spline could be configured to prohibit generation of splines with a radius smaller than the vehicle's minimum turning radius. 
+The next step involves generating a centripetal Catmull-Rom spline~\cite{splines} to remove any sharp turns from the path. This type of spline is used as it is guaranteed to pass through the specified nodes~\cite{gameproggems}, and will not result in any self-intersections or cusps~\cite{splines}. To create the splines, four consecutive points are used as the input, and the result is a spline between the second and third points. To generate a spline between the first two nodes, simply input the first node as both the first and second points. Likewise, the spline between the last two nodes is created by using the final node for the third and fourth input points. The resulting spline is represented by three additional points between the second and third input points. Generation of these splines causes an increase in path length but is necessary to create a path that can realistically be followed. Modification of spline generation, paired with a modification of the cost computation discussed in Section~\ref{sec:costcomputation}, would allow HD* to account for vehicle dynamics. For example, the parameterization of the spline could be configured to prohibit generation of splines with a radius smaller than the vehicle's minimum turning radius. 
 
 In the final step, the points that define that path are used to generate a trajectory composed of $(x, y, z)$ coordinates, with each coordinate no more than one unit away from the previous one. The number of coordinates generated between two successive nodes in the path is equal to the maximum absolute value of the differences in the x-, y-, and z-coordinates. If two consecutive nodes in the path are located at $(9,2,6)$ and $(6,10,7)$, then there will be 8 points used to define the trajectory between them. This trajectory is followed until an obstacle is detected or the halfway point of the refinement region is reached. The refinement region is explained, along with a walkthrough of the path-finding process, in Section~\ref{sec:pathfindingprocess}.
-
-
-%\begin{figure}
-%	\begin{center}
-% 		\includegraphics[width=0.4\textwidth]{images/field_path}
-%		 \caption{Optimal path produced by grid-based planners compared to the true optimal path.}
-% 		\label{f:smoothing_downside}
-%	 \end{center}
-%\end{figure}
-
-
-It is important to note that although smoothing results in shorter paths, it does not always result in the true shortest path. The path found with a grid representation may be optimal for traveling between node centers, but node centers do not always compose the true shortest path~\cite{field_dstar}. %This is shown in Fig.~\ref{f:smoothing_downside}, where the optimal path between two locations cannot be found, and smoothing does not reduce path length. Any angle planners such Theta*~\cite{thetastar} and Field D*~\cite{field_dstar} are better at finding a near-optimal path in these situations, but can be more computationally expensive and thus not suitable for real-time use.
-
-
-\subsubsection{Cost Computation}
-\label{sec:costcomputation}
-Although HD* is not designed to account for the UAV's dynamics, it should be capable of handing some basic constraints. The cost to change elevation can vary depending on the particular vehicle, and a planner that neglects this will not always produce the optimal path. Likewise, some UAVs cannot travel straight up, so a path that includes vertical movement is useless for these vehicles. Therefore, it is essential that the planner factor in these cost constraints. 
-
-First, the default cost of traversal between two nodes must be defined. This is simply the Euclidean distance between the two nodes. If line-of-sight does not exist or the target node has an obstacle, the cost is infinity. Assuming the target node is open, the final traversal cost is determined by multiplying the distance by a directional cost scale factor, given by $c_x, \,c_y,\, \textrm{and } c_z$ for the x-, y-, and z-directions respectively. These scale factors are configured by the user to modify the cost of travel in each direction. The predominant scale factor is used when computing cost. If the cost of the z-direction is set to 2 and the UAV is traveling upwards at some angle relative to the ground, the cost is still 2 and is not reduced by the fact that travel is not vertical. 
-
-Depending on the environment, increasing $c_z$ can result in the planner preferring strictly vertical movement. Many UAVs, particularly fixed wing aircraft, are unable to change their altitude in this manner. A boolean variable called $restrictVerticalMovement$ is used to control this, and when used, vertical successor nodes are no longer included in the set of successors. Instead, the only way to change altitude is through vertical diagonal movement. To implement these changes, the way D* Lite computes cost is modified for HD*. The cost between two nodes is now computed with the function ComputeCost($s,s'$), which accounts for these scale factors. This cost computation function is the same when computing paths at any level, with the addition of an initial line-of-sight check for the coarse paths.
-
-As discussed in Section~\ref{sec:refinement}, modification of this cost computation step is the second change necessary to expand HD* to account for vehicle dynamics. The updated cost computation would involve developing a more robust and comprehensive function to map the vehicle's state and constraints into this cost calculation, and should assign a cost of infinity to impossible maneuvers. This is effectively an extension of the concept already implemented into the algorithm, where, for example, the cost of purely vertical traversal can be set to infinity. 
-
-\subsubsection{Safety Margin}
-\label{sec:qualityEnd}
-Because HD* searches for the shortest path, it is likely that portions of the path will be directly adjacent to obstacle edges and corners. For a realistic implementation, this is dangerous and increases the risk of collision. It is also possible that the generated path passes through a region too narrow to safely pass through. Thus, a safety margin is needed to prevent the UAV from getting too close to obstacles. The safety margin is defined as the distance, in nodes, to maintain between the agent and an obstacle. This is implemented by extending the footprint of obstacles to include the surrounding nodes within the safety margin.
-
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-
-
-
-
-
-
-
-%\subsubsection{Methods Used to Improve Performance}
-%\label{chap:performance_methods}
-
-
-\subsubsection{Data Structures}
-\label{sec:performance1}
-
-When finding a path, a large percentage of time is spent managing the priority queue, so the data structure chosen to manage the queue is important. 
-%The four primary operations performed on the queue are:
-%\begin{enumerate}
-%    \item Pop best node, which is the action of removing the best node from the priority queue and returning the node number and key values.
-%    \item Find node, which checks whether a node is a member of the priority queue.
-%    \item Add node, in which is a new node is added to the priority queue.
-%    \item Update node, which updates a node's priority when it is already in the queue and the new key value is different from the existing value.
-%\end{enumerate}
-Analysis of the D* Lite algorithm reveals that popping the best node from $U$ occurs once for each node visited, while node insertion and membership checks occur up to 26 times for each popped node. Updating the priority of a node is the least common, which is fortunate since this is an expensive operation. A binary heap is a common choice, as it provides $O(\log n)$ performance for the first three operations~\cite{intro_algs}. HD* uses a binary heap, but supplements it with a hash table to give $O(1)$ performance for membership checks. 
-
-\subsubsection{Heuristic Choice}
-
-An admissible heuristic is required to find the shortest path between the start and goal nodes. HD* uses the Euclidean distance between two points, which represents the smallest possible cost between two nodes and is both an admissible and consistent heuristic. A heuristic which underestimates the true distance or knows it exactly is guaranteed to find the shortest path, and the more it underestimates the distance the more nodes it will search~\cite{astar}. This is evident in the limiting case when the heuristic is zero, and A* reduces into Dijkstra's algorithm~\cite{phd_planning}, which expands every node until it finds the shortest path.
-
-Alternatively, a non-admissible heuristic overestimates the distance between two nodes, which results in fewer nodes being expanded. The downside to this is that finding the shortest path is no longer guaranteed~\cite{astar}. Since the ability to find a true shortest path was already sacrificed by implementing hierarchical planning, a slightly non-admissible heuristic may be safely used to help reduce computation time. Inflating the heuristic also helps speed up the search when there are multiple paths with the same cost, which is common on uniform cost grids. An admissible heuristic will spend more time deciding between paths of equal or near equal cost than a non-admissible heuristic~\cite{astarHeur}. It has been proven in~\cite{heuristicrule} that for a consistent heuristic which has been multiplied by a factor of $(1+\epsilon)$, the resulting path is guaranteed to be within $(1+\epsilon)$ times the shortest path. This is expressed in~\ref{e:heuristic}, where $L_{opt}$ represents the optimal path length and $L_{mod}$ represents the path found when the heuristic is modified
-\begin{equation}
-\label{e:heuristic}
-	L_{opt} \leq L_{mod} \leq L_{opt}(1+\epsilon).
-\end{equation}
-
-HD* uses a default value of $\epsilon=0.01$, and the tradeoff between $\epsilon$, path cost, and performance is explored in Section~\ref{chap:performance}.
-
-
-\subsubsection{Path-Finding Process}
-\label{sec:pathfindingprocess}
-
-%HD* computes the entire coarse path from goal to start, but this does not mean the entire path must be refined as well. Only a portion needs to be refined to get the UAV moving in the right direction, and the remainder can be refined as necessary. Furthermore, when the environment is unknown outside of the search radius of the UAV, the planned coarse path may soon become invalid. Therefore, refining the entire path up front is wasteful. Instead, we only refine the section of the path that lies within the refinement distance $d_{\,r}$. This distance is expressed as a function of the sensor range, $r_s$, of the UAV. An intuitive choice would be to set $d_{\,r} = r_s$, but this may not be ideal when $r_s$ is large. A large sensor range causes the time spent in the refinement to become greater, thereby increasing the planning time. Alternatively, this choice of $d_{\,r}$ may be too conservative for situations when the agent has a small search radius. To counter these situations, HD* allows the user to specify the value of $d_{\,r}$, providing control over the trade-off between path quality and computation time. The value selected for $d_{\,r}$ can significantly affect both path length and computation time, and we explore this relationship in Section~\ref{chap:performance}.
-
-
-HD* computes the entire coarse path from goal to start, but only a portion needs to be refined to get the UAV moving, and the remainder can be refined as needed. Furthermore, when traveling in an unknown environment the planned coarse path may soon become invalid. Thus, refining the entire path up front may be wasteful. Instead, refinement is only performed on the section of the path that lies within the refinement distance $d_{\,r}$. This distance is expressed as a function of the sensor range, $r_s$, of the UAV. An intuitive choice would be to set $d_{\,r} = r_s$, but this may not be ideal when $r_s$ is large, as a lot of time may be spent refining the path. Alternatively, this choice of $d_{\,r}$ may be too conservative for situations when the agent has a small search radius. To counter these situations and provide flexibility, HD* allows the user to specify the value of $d_{\,r}$, providing control over the trade-off between path quality and computation time. This trade-off is explored in Section~\ref{chap:performance}.
- %tThe value selected for $d_{\,r}$ can significantly affect both path length and computation time, and we explore this relationship in Section~\ref{chap:performance}.
-
-Once the lowest resolution path is computed, the portion within $d_{\,r}$ is refined. The segment is continually refined by the process presented in Section~\ref{sec:refinement} until represented in the highest resolution nodes. Next, the entire path is smoothed. Once complete, the path is represented by many closely spaced level 0 nodes within the refinement region, and fewer nodes elsewhere. Splines are then generated and the exact coordinates defining the trajectory are computed. This process is shown in Fig.~\ref{f:refinement_process} from the top down view of a $128\times128\times128$ 3D map, where level 3 is the most coarse level with nodes 16 units apart. Level 2 nodes are 8 units apart, and level 1 nodes are 4 units apart. Circles represent the nodes composing the path. The agent follows the resulting trajectory until the goal is reached, or one of three situations occur:
-\begin{enumerate}
-	\item new obstacles invalidate the current path;
-	\item the target location has moved;
-	\item the UAV is halfway through refinement region.
-%	\item the goal is reached.
-\end{enumerate}
-\newcommand{\figureWidth}{0.4\textwidth}	
- \begin{figure*}[t]
- 	\centering
-
-     \subfigure[][The lowest resolution path is found with level 3. Some nodes pass through obstacles, as the UAV is unaware of those obstacles.]{\includegraphics[width=\figureWidth]{images/refinement/step1}      \label{f:step1}}\qquad\qquad\qquad
-    \subfigure[][Next, level 2 nodes are used to refine the segment of the path within the refinement distance.]{\includegraphics[width=\figureWidth]{images/refinement/step2}	\label{f:step2}}
-    
-    \subfigure[][Level 1 nodes are used to further refine the path.]{\includegraphics[width=\figureWidth]{images/refinement/step3}	\label{f:step3}}\qquad\qquad\qquad
-     \subfigure[][The next refinement stage uses the highest resolution nodes.]{\includegraphics[width=\figureWidth]{images/refinement/step4}	\label{f:step4}}
-     
-      \subfigure[][The path is then smoothed, which leaves only three nodes to define the path.]{\includegraphics[width=\figureWidth]{images/refinement/step5}	\label{f:step5}}\qquad\qquad\qquad
-        \subfigure[][Finally, additional points are generated with a centripetal Catmull-Rom spline. These points are used to create the trajectory.]{\includegraphics[width=\figureWidth]{images/refinement/step6}	\label{f:step6}}
-      
-
-           
-        \caption{Path Finding and Refinement Process for HD*}
-	\label{f:refinement_process}
-
- \end{figure*}
-When scenarios 1 or 2 occur, a new coarse path is planned and the process restarts. Scenario 3 occurs when neither of the two preceding scenarios forces a replan before the midway point of the refinement region is reached. Scheduling replans halfway through the refinement region helps ensure high-quality paths.
-% 
-% \begin{figure*}[t]
-%	\centering
-%	
-%	 \subfigure[][The path is then smoothed. Aside from the start and goal nodes, only one extra node is needed to define the path because the UAV currently assumes line-of-sight exists from the second node to the goal.]{\includegraphics[width=\figureWidth]{images/refinement/step5}	\label{f:step5}}\qquad\qquad\qquad
-%        \subfigure[][Finally, additional points are generated with a centripetal Catmull-Rom spline. These points are used to create the trajectory composed of $(x,y,z)$ coordinates that the UAV will follow.]{\includegraphics[width=\figureWidth]{images/refinement/step6}	\label{f:step6}}
-%      
-%        
-%        \captcont*{Path Finding and Refinement Process (cont.)}
-%	\label{f:refinement_process}
-%\end{figure*}
-
-
-
-
-
-%\FloatBarrier
-\subsubsection{Time Restrictions}
-\label{sec:performanceEnd}
-When there is a restriction on planning time, it is possible that the time required to complete all of these steps may be too long. Therefore HD* allows the user to set a time limit, $t_{max}$, on the path-finding process. This limit does not affect the smoothing, spline generation, and trajectory generation steps, as these are necessary to produce realistic paths. Instead, the limit affects the path refinement process. 
-
-Once HD* finds a coarse path, the elapsed time is compared to the value of $t_{max}$. If the elapsed time is greater than $t_{max}$, the function exits and passes the coarse path to the smoothing function. If it is less than $t_{max}$, one additional level of refinement is completed. HD* again checks the elapsed time and executes another level of refinement if $t_{max}$ has not been exceeded. This process repeats until the path has been refined down to level 0, or the time limit was reached. This implementation is not a hard restriction in the sense that the total path planning time will nearly always exceed $t_{max}$, but it does allow for some flexibility in limiting the time spent planning. 
-
-However, with a few extra steps, this approach can be easily modified to effectively act as a hard limit tailored to a specific vehicle. First, hardware-in-the-loop simulations using a map representative of the expected environment will allow for more accurate path-finding time statistics to be determined. Next, a function can be developed that maps the vehicle's state to the max allowable path computation time. With these two pieces, and the knowledge that the next level of refinement will always be computed if the elapsed time is less than $t_{max}$, adjust $t_{max}$ accordingly. For example, consider a case where the simulated path finding times are found be normally distributed with a standard deviation of $x$ ms, and the maximum allowable path-finding time is $y$ ms (although this is more likely to be based on velocity). Now, setting $t_{max}  = y - 2x$ ensures the path-finding time will be less than the hard limit of $y$ ms 95.4\% of the time, and setting $t_{max}  = y - 3x$ increases this to 99.7\% of the time. Additionally, the decision of whether or not to compute another iteration can be modified from a simple $t_{elapsed} \leq t_{max}$ check, to something that accounts for these standard deviations as well, such as $t_{elapsed} + 3x \leq t_{max} $.
-
-
-\subsection{HD* Pseudocode}
-\label{sec:pseudocode}
-This section provides the relevant pseudocode for HD*.
-
-
-
-\begin{algorithm}[H]
-\caption{HD* Algorithm}
-\label{a:hdstar}
-\begin{algorithmic}[1]
-
-\small
-	\State \textbf{class } \textsc{CreateLevel}
-		\State \begin{varwidth}[t]{\linewidth} 
-			\hskip\algorithmicindent Class containing the following functions: Initialize(), CalcKey(),  \par
-			\hskip\algorithmicindent \hskip\algorithmicindent AddNode(), RemoveNode(), PopNode(), UpdateVertex(), \par
-			\hskip\algorithmicindent \hskip\algorithmicindent ComputeCost(), Succ(), ComputeShortestPath() \par
-		\end{varwidth}
-		\State\hspace{\algorithmicindent} $U, \,entryfinder, \,k_m, \,g, \,rhs, $ and $bptr$ are class variables
-\begin{spacing}{0.5}
-\end{spacing}
-	\Function{SetupLevels}{\,}	
-%		\State nLevels = 1
-%		\State $d_{max} = \max(dim_x, \, dim_y, \, dim_z)$ %\Comment{$l$ represents map size in each dimension}
-%		\While{$d_{max} > 4 $} \Comment{Minimum successor distance of 4}
-%			\State $d_{max} = d_{max} / 4 $
-%			\State nLevels = nLevels + 1
-%		\EndWhile
-		\State Calculate number of levels and the successor distance at each level
-		\State Define a variable $L$ for each level, where $L$ is an instance of the CreateLevel class
-		\State \textbf{return } $L_1, L_2,..., L_{nLevels} $
-	\EndFunction
-\begin{spacing}{0.5}
-\end{spacing}
-	\Function{FindPath}{L}
-		\State $ d = \textrm{EuclideanDistance}(s_{start}, s_{goal}) $
-		\State $ path = [ s_{start}, s_{goal} ] $
-		\If{$d < 28$} \Comment{Distance too short to benefit from hierarchical planning}
-			\State $ path = L_0$.ComputeShortestPath($path$)
-			\State $ \textbf{return } path $
-		\EndIf
-		
-		\For{$level_a = nLevels \textbf{ to }  0$}
-			\If{$ d >= 7\times L_{level_a}.$length} \Comment{Length is the successor distance}
-				\State $ path = L_{level_a}$.ComputeShortestPath($path$)
-				\State \textbf{break}
-			\EndIf
-		\EndFor
-		
-		\While{$t_{max}$ has not been exceeded}
-			\State $path_{refined} = $ segment of path that lies within the refinement distance $d_{\,r}$
-			\For{$level_b = level_a-1 \textbf{ to } 0$} \Comment{Start refinement from next lowest level}
-				\State $ path_{refined} = L_{level_b}$.ComputeShortestPath($path_{refined}$)
-			\EndFor
-		\EndWhile
-		
-		\State Splice $path_{refined}$ into the beginning of $path$
-		\State$ \textbf{return } path $
-		
-	\EndFunction
-
-\algstore{myalg}
-\end{algorithmic}
-\end{algorithm}
-
-
-
-
-\begin{algorithm}[H]
-\begin{algorithmic}[1]
-\algrestore{myalg}
-	
-
-
-\item[]	
-
-		
-	\Function{GenerateTrajectory}{$path$}
-		\State $ newpath = \emptyset $
-		\For{$ i = 0 \textbf{ to } \textrm{length}(path)-1$}
-			\State $s = path_i $
-			\State $s' = path_{i+1} $
-			\State $d_x = s_x-s'_x;\,\, d_y = s_y-s'_y;\,\, d_z = s_z-s'_z$
-			\State $d_{max} = \max(|d_x|,\, |d_y|,\, |d_z|) $
-			\If{$d_{max} \leq 1$} \Comment{Occurs when spline points are close together}
-				\State $newpath = newpath \cup \{s'\}$
-			\Else
-				\For{$j = 1 \textbf{ to } d_{max}$}
-					\State $f_x = d_x/d_{max};\,\, f_y = d_y/d_{max}; \,\, f_z = d_z/d_{max} $
-					\State $u_x = s_x + j\times f_x $
-					\State $u_y = s_y + j\times f_y $
-					\State $u_z = s_z + j\times f_z $
-					\State $newpath = newpath \cup \{(u_x,\, u_y,\, u_z')\}$
-				\EndFor
-			\EndIf			
-		\EndFor
-		\State $\textbf{return } newpath $
-	\EndFunction
-\begin{spacing}{0.5}
-\end{spacing}
-    	\Function{Main}{L}
-		\State $ L = \textrm{SetupLevels}()$
-		\State Scan environment for obstacles
-		\While{$s_{start} \neq s_{goal}$}
-			\State $path = \textrm{FindPath}(L)$
-			\State $path = \textrm{SmoothPath}(path)$
-			\State $path = \textrm{CatmullRomSpline}(path)$
-			\State $path = \textrm{GenerateTrajectory}(path)$
-		
-			\State $s_{last} = s_{start}$
-			\State $dfs = 0$ \Comment{Tracks distance traveled since path was found}
-			
-			\While{$s_{start} \neq s_{goal}$ \textbf{ and} path is valid}
-				\State Move to next point in $path$
-				\State $s_{start} = \textrm{current location} $
-				\State Scan for new obstacles and determine if they block the current path
-				\If{current path is blocked}
-					%\State $ k_m += h(s_{last}, s_{start}) $
-					%\State $ s_{last} = s_{start} $
-					\For{\textbf{all} nodes $u$ with changed costs}
-						\State Update traversal cost of $u$
-					\EndFor
-					\State Path is no longer valid
-				\EndIf
-				
-				\State $dfs = \textrm{EuclideanDistance}(s_{start}, s_{last})$ 
-				\If{$dfs \geq d_{\,r}/2$ \textbf{ or} goal has moved}
-					\State Path is no longer valid
-				\EndIf
-				
-			\EndWhile
-			
-			
-		\EndWhile
-	\EndFunction
-	
-		
-	\end{algorithmic}
-\end{algorithm}
-
-
-
 
 \begin{algorithm}[H]
 This version assumes $c_x=c_y=1$
@@ -610,11 +471,6 @@ This version assumes $c_x=c_y=1$
 		
 	\end{algorithmic}
 \end{algorithm}
-
-
-
-
-
 
 \begin{algorithm}[H]
 	$t_i$ determines the parameterization, $\alpha=0.5$ results in the centripetal parameterization used by HD*, $p_1$ and $p_2$ are a pair of $(x,y,z)$ input control points. HD* uses $nPts = 5$, resulting in three points between $p_1$ and $p_2$.
@@ -665,9 +521,27 @@ This version assumes $c_x=c_y=1$
 	\EndFunction
 	\end{algorithmic}
 \end{algorithm}
+%\begin{figure}
+%	\begin{center}
+% 		\includegraphics[width=0.4\textwidth]{images/field_path}
+%		 \caption{Optimal path produced by grid-based planners compared to the true optimal path.}
+% 		\label{f:smoothing_downside}
+%	 \end{center}
+%\end{figure}
 
 
+It is important to note that although smoothing results in shorter paths, it does not always result in the true shortest path. The path found with a grid representation may be optimal for traveling between node centers, but node centers do not always compose the true shortest path~\cite{field_dstar}. %This is shown in Fig.~\ref{f:smoothing_downside}, where the optimal path between two locations cannot be found, and smoothing does not reduce path length. Any angle planners such Theta*~\cite{thetastar} and Field D*~\cite{field_dstar} are better at finding a near-optimal path in these situations, but can be more computationally expensive and thus not suitable for real-time use.
 
+
+\subsection{Cost Computation}
+\label{sec:costcomputation}
+Although HD* is not designed to account for the UAV's dynamics, it should be capable of handing some basic constraints. The cost to change elevation can vary depending on the particular vehicle, and a planner that neglects this will not always produce the optimal path. Likewise, some UAVs cannot travel straight up, so a path that includes vertical movement is useless for these vehicles. Therefore, it is essential that the planner factor in these cost constraints. 
+
+First, the default cost of traversal between two nodes must be defined. This is simply the Euclidean distance between the two nodes. If line-of-sight does not exist or the target node has an obstacle, the cost is infinity. Assuming the target node is open, the final traversal cost is determined by multiplying the distance by a directional cost scale factor, given by $c_x, \,c_y,\, \textrm{and } c_z$ for the x-, y-, and z-directions respectively. These scale factors are configured by the user to modify the cost of travel in each direction. The predominant scale factor is used when computing cost. If the cost of the z-direction is set to 2 and the UAV is traveling upwards at some angle relative to the ground, the cost is still 2 and is not reduced by the fact that travel is not vertical. 
+
+Depending on the environment, increasing $c_z$ can result in the planner preferring strictly vertical movement. Many UAVs, particularly fixed wing aircraft, are unable to change their altitude in this manner. A boolean variable called $restrictVerticalMovement$ is used to control this, and when used, vertical successor nodes are no longer included in the set of successors. Instead, the only way to change altitude is through vertical diagonal movement. To implement these changes, the way D* Lite computes cost is modified for HD*. The cost between two nodes is now computed with the function ComputeCost($s,s'$), which accounts for these scale factors. This cost computation function is the same when computing paths at any level, with the addition of an initial line-of-sight check for the coarse paths. Algorithm~\ref{a:computecost} details this approach.
+
+As discussed in Section~\ref{sec:refinement}, modification of this cost computation step is the second change necessary to expand HD* to account for vehicle dynamics. The updated cost computation would involve developing a more robust and comprehensive function to map the vehicle's state and constraints into this cost calculation, and should assign a cost of infinity to impossible maneuvers. This is effectively an extension of the concept already implemented into the algorithm, where, for example, the cost of purely vertical traversal can be set to infinity. 
 
 \begin{algorithm}[H]
 This version assumes $c_x=c_y=1$
@@ -703,8 +577,39 @@ This version assumes $c_x=c_y=1$
 	\end{algorithmic}
 \end{algorithm}
 
+\subsection{Safety Margin}
+\label{sec:qualityEnd}
+Because HD* searches for the shortest path, it is likely that portions of the path will be directly adjacent to obstacle edges and corners. For a realistic implementation, this is dangerous and increases the risk of collision. It is also possible that the generated path passes through a region too narrow to safely pass through. Thus, a safety margin is needed to prevent the UAV from getting too close to obstacles. The safety margin is defined as the distance, in nodes, to maintain between the agent and an obstacle. This is implemented by extending the footprint of obstacles to include the surrounding nodes within the safety margin.
 
 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+
+
+
+
+%\subsubsection{Methods Used to Improve Performance}
+%\label{chap:performance_methods}
+
+
+\subsection{Data Structures}
+\label{sec:performance1}
+
+When finding a path, a large percentage of time is spent managing the priority queue, so the data structure chosen to manage the queue is important. 
+%The four primary operations performed on the queue are:
+%\begin{enumerate}
+%    \item Pop best node, which is the action of removing the best node from the priority queue and returning the node number and key values.
+%    \item Find node, which checks whether a node is a member of the priority queue.
+%    \item Add node, in which is a new node is added to the priority queue.
+%    \item Update node, which updates a node's priority when it is already in the queue and the new key value is different from the existing value.
+%\end{enumerate}
+Analysis of the D* Lite algorithm reveals that popping the best node from priority queue $U$ occurs once for each node visited, while node insertion and membership checks occur up to 26 times for each popped node. Updating the priority of a node is the least common, which is fortunate since this is an expensive operation. A binary heap is a common choice for queue management, as it provides $O(\log n)$ performance for the first three operations~\cite{intro_algs}. HD* uses a binary heap, but supplements it with a hash table to give $O(1)$ performance for membership checks. The implementation of this data structure is given in Algorithm~\ref{a:priority_queue_operations}.
 
 \begin{algorithm}[H]
 	The entries in $entryfinder$ and $U$ are formatted as $[k_1, k_2, u]$, where $k_1$ and $k_2$ represent the priorities and $u$ is the node
@@ -742,6 +647,87 @@ This version assumes $c_x=c_y=1$
 
 	\end{algorithmic}
 \end{algorithm}
+
+
+\subsection{Heuristic Choice}
+
+An admissible heuristic is required to find the shortest path between the start and goal nodes. HD* uses the Euclidean distance between two points, which represents the smallest possible cost between two nodes and is both an admissible and consistent heuristic. A heuristic which underestimates the true distance or knows it exactly is guaranteed to find the shortest path, but the more it underestimates the distance the more nodes the planning algorithm will search~\cite{astar}. This is evident in the limiting case when the heuristic is zero, and A* reduces into Dijkstra's algorithm~\cite{phd_planning}, which expands every node until it finds the shortest path.
+
+Alternatively, a non-admissible heuristic may be used. This overestimates the distance between two nodes, which results in fewer nodes being expanded. The downside to this is that finding the shortest path is no longer guaranteed~\cite{astar}. Since the ability to find a true shortest path was already sacrificed by implementing hierarchical planning, a slightly non-admissible heuristic may be safely used to help reduce computation time. Inflating the heuristic also helps speed up the search when there are multiple paths with the same cost, which is common on uniform cost grids. An admissible heuristic will spend more time deciding between paths of equal or near equal cost than a non-admissible heuristic~\cite{astarHeur}. It has been proven in~\cite{heuristicrule} that for a consistent heuristic which has been multiplied by a factor of $(1+\epsilon)$, the resulting path is guaranteed to be within $(1+\epsilon)$ times the shortest path. This is expressed in~\ref{e:heuristic}, where $L_{opt}$ represents the optimal path length and $L_{mod}$ represents the path found when the heuristic is modified
+\begin{equation}
+\label{e:heuristic}
+	L_{opt} \leq L_{mod} \leq L_{opt}(1+\epsilon).
+\end{equation}
+
+HD* uses a default value of $\epsilon=0.01$, and the tradeoff between $\epsilon$, path cost, and performance is explored in Section~\ref{chap:performance}.
+
+
+\subsection{Path-Finding Process}
+\label{sec:pathfindingprocess}
+
+%HD* computes the entire coarse path from goal to start, but this does not mean the entire path must be refined as well. Only a portion needs to be refined to get the UAV moving in the right direction, and the remainder can be refined as necessary. Furthermore, when the environment is unknown outside of the search radius of the UAV, the planned coarse path may soon become invalid. Therefore, refining the entire path up front is wasteful. Instead, we only refine the section of the path that lies within the refinement distance $d_{\,r}$. This distance is expressed as a function of the sensor range, $r_s$, of the UAV. An intuitive choice would be to set $d_{\,r} = r_s$, but this may not be ideal when $r_s$ is large. A large sensor range causes the time spent in the refinement to become greater, thereby increasing the planning time. Alternatively, this choice of $d_{\,r}$ may be too conservative for situations when the agent has a small search radius. To counter these situations, HD* allows the user to specify the value of $d_{\,r}$, providing control over the trade-off between path quality and computation time. The value selected for $d_{\,r}$ can significantly affect both path length and computation time, and we explore this relationship in Section~\ref{chap:performance}.
+
+
+HD* computes the entire coarse path from goal to start, but only a portion needs to be refined to get the UAV moving, and the remainder can be refined as needed. Furthermore, when traveling in an unknown environment the planned coarse path may soon become invalid. Thus, refining the entire path up front may be wasteful. Instead, refinement is only performed on the section of the path that lies within the refinement distance $d_{\,r}$. This distance is expressed as a function of the sensor range, $r_s$, of the UAV. An intuitive choice would be to set $d_{\,r} = r_s$, but this may not be ideal when $r_s$ is large, as a lot of time may be spent refining the path. Alternatively, this choice of $d_{\,r}$ may be too conservative for situations when the agent has a small search radius. To counter these situations and provide flexibility, HD* allows the user to specify the value of $d_{\,r}$, providing control over the trade-off between path quality and computation time. This trade-off is explored in Section~\ref{chap:performance}.
+ %tThe value selected for $d_{\,r}$ can significantly affect both path length and computation time, and we explore this relationship in Section~\ref{chap:performance}.
+
+Once the lowest resolution path is computed, the portion within $d_{\,r}$ is refined. The segment is continually refined by the process presented in Section~\ref{sec:refinement} until represented in the highest resolution nodes. Next, the entire path is smoothed. Once complete, the path is represented by many closely spaced level 0 nodes within the refinement region, and fewer nodes elsewhere. Splines are then generated and the exact coordinates defining the trajectory are computed. This process is shown in Fig.~\ref{f:refinement_process} from the top down view of a $128\times128\times128$ 3D map, where level 3 is the most coarse level with nodes 16 units apart. Level 2 nodes are 8 units apart, and level 1 nodes are 4 units apart. Circles represent the nodes composing the path. The agent follows the resulting trajectory until the goal is reached, or one of three situations occur:
+\begin{enumerate}
+	\item new obstacles invalidate the current path;
+	\item the target location has moved;
+	\item the UAV is halfway through refinement region.
+%	\item the goal is reached.
+\end{enumerate}
+\newcommand{\figureWidth}{0.4\textwidth}	
+ \begin{figure*}[t]
+ 	\centering
+
+     \subfigure[][The lowest resolution path is found with level 3. Some nodes pass through obstacles, as the UAV is unaware of those obstacles.]{\includegraphics[width=\figureWidth]{images/refinement/step1}      \label{f:step1}}\qquad\qquad\qquad
+    \subfigure[][Next, level 2 nodes are used to refine the segment of the path within the refinement distance.]{\includegraphics[width=\figureWidth]{images/refinement/step2}	\label{f:step2}}
+    
+    \subfigure[][Level 1 nodes are used to further refine the path.]{\includegraphics[width=\figureWidth]{images/refinement/step3}	\label{f:step3}}\qquad\qquad\qquad
+     \subfigure[][The next refinement stage uses the highest resolution nodes.]{\includegraphics[width=\figureWidth]{images/refinement/step4}	\label{f:step4}}
+     
+      \subfigure[][The path is then smoothed, which leaves only three nodes to define the path.]{\includegraphics[width=\figureWidth]{images/refinement/step5}	\label{f:step5}}\qquad\qquad\qquad
+        \subfigure[][Finally, additional points are generated with a centripetal Catmull-Rom spline. These points are used to create the trajectory.]{\includegraphics[width=\figureWidth]{images/refinement/step6}	\label{f:step6}}
+      
+
+           
+        \caption{Path Finding and Refinement Process for HD*}
+	\label{f:refinement_process}
+
+ \end{figure*}
+ 
+When scenarios 1 or 2 occur, a new coarse path is planned and the process restarts. Scenario 3 occurs when neither of the two preceding scenarios forces a replan before the midway point of the refinement region is reached. Scheduling replans halfway through the refinement region helps ensure high-quality paths.
+% 
+% \begin{figure*}[t]
+%	\centering
+%	
+%	 \subfigure[][The path is then smoothed. Aside from the start and goal nodes, only one extra node is needed to define the path because the UAV currently assumes line-of-sight exists from the second node to the goal.]{\includegraphics[width=\figureWidth]{images/refinement/step5}	\label{f:step5}}\qquad\qquad\qquad
+%        \subfigure[][Finally, additional points are generated with a centripetal Catmull-Rom spline. These points are used to create the trajectory composed of $(x,y,z)$ coordinates that the UAV will follow.]{\includegraphics[width=\figureWidth]{images/refinement/step6}	\label{f:step6}}
+%      
+%        
+%        \captcont*{Path Finding and Refinement Process (cont.)}
+%	\label{f:refinement_process}
+%\end{figure*}
+
+
+
+
+
+%\FloatBarrier
+\subsection{Time Restrictions}
+\label{sec:performanceEnd}
+When there is a restriction on planning time, it is possible that the time required to complete all of these steps may be too long. Therefore HD* allows the user to set a time limit, $t_{max}$, on the path-finding process. This limit does not affect the smoothing, spline generation, and trajectory generation steps, as these are necessary to produce realistic paths. Instead, the limit affects the path refinement process. 
+
+Once HD* finds a coarse path, the elapsed time is compared to the value of $t_{max}$. If the elapsed time is greater than $t_{max}$, the function exits and passes the coarse path to the smoothing function. If it is less than $t_{max}$, one additional level of refinement is completed. HD* again checks the elapsed time and executes another level of refinement if $t_{max}$ has not been exceeded. This process repeats until the path has been refined down to level 0, or the time limit was reached. This implementation is not a hard restriction in the sense that the total path planning time will nearly always exceed $t_{max}$, but it does allow for some flexibility in limiting the time spent planning. 
+
+However, with a few extra steps, this approach can be easily modified to effectively act as a hard limit tailored to a specific vehicle. First, hardware-in-the-loop simulations using a map representative of the expected environment will allow for more accurate statistics describing path-finding time to be determined. Next, a function can be developed that maps a given vehicle state to a max allowable path computation time. With these two pieces, and the knowledge that the next level of refinement will always be computed if the elapsed time is less than $t_{max}$, adjust $t_{max}$ accordingly. For example, consider a case where the simulated path finding times are found be normally distributed with a standard deviation of $x$ ms, and the maximum allowable path-finding time is a constant $y$ ms (although this time is likely to be based on velocity). Now, setting $t_{max}  = y - 2x$ ensures the path-finding time will be less than the hard limit of $y$ ms 95.4\% of the time, and setting $t_{max}  = y - 3x$ increases this to 99.7\% of the time. Additionally, the decision of whether or not to compute another iteration can be modified from a simple $t_{elapsed} \leq t_{max}$ check, to something that accounts for these standard deviations, such as $t_{elapsed} + 3x \leq t_{max} $.
+
+
+%\subsection{HD* Pseudocode}
+%\label{sec:pseudocode}
+%This section provides the relevant pseudocode for HD*.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
